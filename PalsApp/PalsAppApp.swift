@@ -9,6 +9,10 @@ import SwiftUI
 
 @main
 struct PalsAppApp: App {
+    init() {
+        PalsFont.register()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
