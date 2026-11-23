@@ -3,7 +3,6 @@ import SwiftUI
 /// App shell after onboarding: Orbit (home), Circles, Progress, Profile.
 struct MainTabView: View {
     let name: String
-    let username: String
     var onRestartOnboarding: () -> Void
 
     private enum AppTab { case orbit, circles, progress, profile }
@@ -31,17 +30,22 @@ struct MainTabView: View {
                     ComingSoonView(lines: ["Your"], highlight: "progress.")
                 }
                 Tab("Profile", systemImage: "person", value: AppTab.profile) {
-                    ProfileTabView(name: name, username: username, photo: photo,
+                    ProfileTabView(name: name, photo: photo,
                                    onResetToday: { withAnimation { model.resetToday() } },
                                    onRestartOnboarding: onRestartOnboarding)
                 }
             }
             // Today's activity is always one tap away, above the tab bar on every tab.
             .tabViewBottomAccessory {
-                ActivityAccessory(activity: model.selectedCircle.activity,
-                                  done: model.completedToday) {
-                    model.showingActivity = true
+                ActivityAccessory(activity: model.selectedCircle.today, done: model.completedToday) {
+                    model.startActivity()
                 }
+            }
+            .sheet(item: $model.activeActivity) { activity in
+                ActivitySessionView(activity: activity, streak: model.streakDays, proof: $model.proofPhoto) {
+                    withAnimation { model.completeTodayActivity() }
+                }
+                .preferredColorScheme(.light)
             }
             .tint(tab == .orbit ? .white : .palsBlue)
             // Orbit sits on brand blue: light status bar, dark tab-bar glass there.
@@ -61,7 +65,7 @@ struct MainTabView: View {
                         tab = .orbit
                         Task {
                             try? await Task.sleep(for: .milliseconds(350))
-                            model.showingActivity = true
+                            model.startActivity()
                         }
                     },
                     onDismiss: finishPrank
@@ -94,22 +98,27 @@ struct MainTabView: View {
 
 /// Compact "today's activity" bar shown in the tab bar's accessory slot.
 private struct ActivityAccessory: View {
-    let activity: String
+    let activity: CircleActivity
     let done: Bool
     var onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                Image(systemName: done ? "checkmark.circle.fill" : "figure.walk.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(done ? Color(hex: 0x22C55E) : Color.primary)
+                if done {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(Color(hex: 0x22C55E))
+                } else {
+                    Text(activity.emoji)
+                        .font(.system(size: 26))
+                }
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(done ? "Done for today" : "Today's activity")
                         .font(.palsBody(12))
                         .foregroundStyle(.secondary)
-                    Text(activity)
+                    Text(activity.title)
                         .font(.pals(16))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -140,7 +149,7 @@ private struct ActivityAccessory: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(done ? "Done for today: \(activity)" : "Start today's activity: \(activity)")
+        .accessibilityLabel(done ? "Done for today: \(activity.title)" : "Start today's activity: \(activity.title)")
     }
 }
 
@@ -163,7 +172,6 @@ private struct ComingSoonView: View {
 
 private struct ProfileTabView: View {
     let name: String
-    let username: String
     let photo: UIImage?
     var onResetToday: () -> Void
     var onRestartOnboarding: () -> Void
@@ -176,11 +184,6 @@ private struct ProfileTabView: View {
             Text(name.isEmpty ? "Pal" : name)
                 .font(.palsDisplay(34))
                 .foregroundStyle(Color.palsInk)
-            if !username.isEmpty {
-                Text("@\(username)")
-                    .font(.palsBody(17))
-                    .foregroundStyle(Color.palsInk.opacity(0.6))
-            }
             Button(didReset ? "Today reset ✓" : "Reset today (demo)") {
                 onResetToday()
                 didReset = true
@@ -211,5 +214,5 @@ private struct ProfileTabView: View {
 }
 
 #Preview {
-    MainTabView(name: "Ahmet", username: "ahmetk", onRestartOnboarding: {})
+    MainTabView(name: "Ahmet", onRestartOnboarding: {})
 }

@@ -76,12 +76,6 @@ struct HomeView: View {
             )
             .preferredColorScheme(.light)
         }
-        .sheet(isPresented: $model.showingActivity) {
-            ActivitySessionView(activity: model.todayActivity, streak: model.streakDays, proof: $model.proofPhoto) {
-                withAnimation { model.completeTodayActivity() }
-            }
-            .preferredColorScheme(.light)
-        }
     }
 
     // MARK: - Sections

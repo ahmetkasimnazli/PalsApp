@@ -1,37 +1,58 @@
 import PhotosUI
 import SwiftUI
 
-/// The "hand holding a polaroid" illustration from the design. Tapping it opens the
-/// photo library; the picked photo is placed inside the polaroid.
+/// Big round avatar: tap to pick a photo from the library. Shows the photo, or your
+/// initial (live, as you type your name) so you see exactly what your pals will see.
 struct ProfilePhotoPicker: View {
     @Binding var photo: UIImage?
+    var name: String = ""
+    var size: CGFloat = 168
 
     @State private var selection: PhotosPickerItem?
     @State private var isLoading = false
 
-    // Geometry of the polaroid's photo area, in points of the 411 × 284.5 illustration
-    // (measured from the exported Sketch bitmap).
-    private enum Polaroid {
-        static let imageSize = CGSize(width: 411, height: 284.5)
-        static let photoCenter = CGPoint(x: 228.5, y: 111.6)
-        static let photoSize = CGSize(width: 125, height: 118)
-        static let rotation = Angle.degrees(10.9)
-        static let badgeCenter = CGPoint(x: 266.5, y: 175)
-        static let badgeDiameter: CGFloat = 44
+    private var ring: CGFloat { max(4, size * 0.05) }
+    private var initial: String {
+        name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? ""
     }
 
     var body: some View {
         PhotosPicker(selection: $selection, matching: .images, photoLibrary: .shared()) {
-            Image("ProfilePhotoPrompt")
-                .resizable()
-                .scaledToFit()
-                .overlay {
-                    GeometryReader { proxy in
-                        let scale = proxy.size.width / Polaroid.imageSize.width
-                        polaroidPhoto(scale: scale)
-                        badge(scale: scale)
+            ZStack {
+                if let photo {
+                    Image(uiImage: photo)
+                        .resizable()
+                        .scaledToFill()
+                        .transition(.opacity)
+                } else {
+                    Color.palsPink
+                    if isLoading {
+                        ProgressView().tint(.white)
+                    } else if initial.isEmpty {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: size * 0.24, weight: .semibold))
+                            .foregroundStyle(.white)
+                    } else {
+                        Text(initial)
+                            .font(.palsDisplay(size * 0.42))
+                            .foregroundStyle(.white)
+                            .contentTransition(.numericText())
                     }
                 }
+            }
+            .frame(width: size - 2 * ring, height: size - 2 * ring)
+            .clipShape(Circle())
+            .padding(ring)
+            .glassEffect(.regular, in: .circle)
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: photo == nil ? "plus" : "pencil")
+                    .font(.system(size: size * 0.11, weight: .bold))
+                    .foregroundStyle(Color.palsIndigo)
+                    .frame(width: size * 0.28, height: size * 0.28)
+                    .glassEffect(.regular.tint(.white), in: .circle)
+                    .offset(x: -size * 0.02, y: -size * 0.02)
+            }
+            .animation(.snappy, value: initial)
         }
         .buttonStyle(PressableStyle())
         .accessibilityLabel(photo == nil ? "Add profile photo" : "Change profile photo")
@@ -39,35 +60,6 @@ struct ProfilePhotoPicker: View {
             guard let item else { return }
             Task { await load(item) }
         }
-    }
-
-    @ViewBuilder
-    private func polaroidPhoto(scale: CGFloat) -> some View {
-        if let photo {
-            Image(uiImage: photo)
-                .resizable()
-                .scaledToFill()
-                .frame(width: Polaroid.photoSize.width * scale, height: Polaroid.photoSize.height * scale)
-                .clipped()
-                .rotationEffect(Polaroid.rotation)
-                .position(x: Polaroid.photoCenter.x * scale, y: Polaroid.photoCenter.y * scale)
-                .transition(.opacity)
-        } else if isLoading {
-            ProgressView()
-                .tint(.white)
-                .position(x: Polaroid.photoCenter.x * scale, y: Polaroid.photoCenter.y * scale)
-        }
-    }
-
-    /// Redrawn on top so it stays visible above a picked photo.
-    private func badge(scale: CGFloat) -> some View {
-        let diameter = Polaroid.badgeDiameter * scale
-        return Image(systemName: photo == nil ? "plus" : "pencil")
-            .font(.system(size: diameter * 0.5, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: diameter, height: diameter)
-            .glassEffect(.regular.tint(.palsBlue), in: .circle)
-            .position(x: Polaroid.badgeCenter.x * scale, y: Polaroid.badgeCenter.y * scale)
     }
 
     private func load(_ item: PhotosPickerItem) async {
@@ -109,7 +101,7 @@ enum ProfilePhotoStore {
 
 #Preview {
     @Previewable @State var photo: UIImage?
-    ProfilePhotoPicker(photo: $photo)
+    ProfilePhotoPicker(photo: $photo, name: "Ahmet")
         .padding()
-        .background(Color.palsOffWhite)
+        .background(Color.palsIndigo)
 }

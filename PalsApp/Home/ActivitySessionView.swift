@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Countdown for today's activity, opened from "Start Activity".
+/// Today's activity: a countdown if it has a timer, otherwise just "Mark as done".
 struct ActivitySessionView: View {
-    let activity: Activity
+    let activity: CircleActivity
     let streak: Int
     @Binding var proof: UIImage?
     var onComplete: () -> Void
@@ -13,16 +13,31 @@ struct ActivitySessionView: View {
     @State private var isFinished = false
     @State private var showingCamera = false
 
-    init(activity: Activity, streak: Int, proof: Binding<UIImage?>, onComplete: @escaping () -> Void) {
+    init(activity: CircleActivity, streak: Int, proof: Binding<UIImage?>, onComplete: @escaping () -> Void) {
         self.activity = activity
         self.streak = streak
         _proof = proof
         self.onComplete = onComplete
-        _remaining = State(initialValue: activity.duration)
+        _remaining = State(initialValue: (activity.minutes ?? 0) * 60)
     }
 
+    private var duration: Int { (activity.minutes ?? 0) * 60 }
+    private var hasTimer: Bool { activity.minutes != nil }
+
     private var progress: Double {
-        1 - Double(remaining) / Double(activity.duration)
+        duration == 0 ? 1 : 1 - Double(remaining) / Double(duration)
+    }
+
+    private var streakLine: String {
+        "Your streak is now \(streak == 1 ? "1 day" : "\(streak) days") 🔥"
+    }
+
+    /// "Walk for 5 minutes" → ["Walk for"] + "5 minutes."
+    private var headline: (lines: [String], highlight: String) {
+        let words = activity.title.split(separator: " ").map(String.init)
+        guard words.count > 2 else { return ([], activity.title + ".") }
+        let split = words.count / 2
+        return ([words[..<split].joined(separator: " ")], words[split...].joined(separator: " ") + ".")
     }
 
     var body: some View {
@@ -35,14 +50,20 @@ struct ActivitySessionView: View {
                         .padding(.top, 72)
                     // `streak` is live from the model, so it already includes today.
                     Text(proof == nil
-                         ? "Your streak is now \(streak == 1 ? "1 day" : "\(streak) days") 🔥\nSnap a proof so your circle believes you."
-                         : "Your streak is now \(streak == 1 ? "1 day" : "\(streak) days") 🔥\nProof posted. Your circle can see it.")
+                         ? "\(streakLine)\nSnap a proof so your circle believes you."
+                         : "\(streakLine)\nProof posted. Your circle can see it.")
                         .font(.palsBody(17))
                         .foregroundStyle(Color.palsInk.opacity(0.7))
                         .padding(.top, 16)
                 } else {
-                    HighlightHeadline(lines: activity.lines, highlight: activity.highlight, size: 48)
-                        .padding(.top, 72)
+                    // Without a timer the big emoji badge below already shows it.
+                    if hasTimer {
+                        Text(activity.emoji)
+                            .font(.system(size: 44))
+                            .padding(.top, 72)
+                    }
+                    HighlightHeadline(lines: headline.lines, highlight: headline.highlight, size: 48)
+                        .padding(.top, hasTimer ? 4 : 72)
                 }
 
                 Spacer(minLength: 12)
@@ -51,8 +72,10 @@ struct ActivitySessionView: View {
                     if isFinished, let proof {
                         ProofPolaroid(image: proof)
                             .transition(.scale(scale: 0.6).combined(with: .opacity))
-                    } else {
+                    } else if hasTimer {
                         timer
+                    } else {
+                        badge
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -95,6 +118,17 @@ struct ActivitySessionView: View {
             }
             .ignoresSafeArea()
         }
+    }
+
+    /// Shown instead of the stopwatch for activities without a timer.
+    private var badge: some View {
+        Text(isFinished ? "✅" : activity.emoji)
+            .font(.system(size: 110))
+            .frame(width: 230, height: 230)
+            .background(.white, in: Circle())
+            .overlay(Circle().strokeBorder(Color.palsInk.opacity(0.08), lineWidth: 1))
+            .contentTransition(.opacity)
+            .accessibilityHidden(true)
     }
 
     private var timer: some View {
@@ -143,10 +177,15 @@ struct ActivitySessionView: View {
                     secondaryButton("Retake photo") { showingCamera = true }
                 }
             }
+        } else if !hasTimer {
+            VStack(spacing: 14) {
+                primaryButton("Mark as done", systemImage: "checkmark") { finish() }
+                secondaryButton("Not yet") { dismiss() }
+            }
         } else {
             VStack(spacing: 14) {
                 primaryButton(
-                    isRunning ? "Pause" : (remaining == activity.duration ? "Start" : "Resume"),
+                    isRunning ? "Pause" : (remaining == duration ? "Start" : "Resume"),
                     systemImage: isRunning ? "pause.fill" : "play.fill"
                 ) {
                     isRunning.toggle()
@@ -238,5 +277,5 @@ private extension CGSize {
 }
 
 #Preview {
-    ActivitySessionView(activity: .today, streak: 12, proof: .constant(nil), onComplete: {})
+    ActivitySessionView(activity: CircleActivity.suggestions[0], streak: 12, proof: .constant(nil), onComplete: {})
 }

@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Big italic headline whose last line sits on a tilted lime band,
+/// Big display headline, one line per entry,
 /// e.g. "Get / things / done / **together.**"
 struct HighlightHeadline: View {
     let lines: [String]
     let highlight: String
     var size: CGFloat = 64
+    var color: Color = .palsInk
 
     var body: some View {
         VStack(alignment: .leading, spacing: -size * 0.2) {
@@ -16,7 +17,7 @@ struct HighlightHeadline: View {
         }
         .font(.palsDisplay(size))
         .tracking(-size * 0.03)
-        .foregroundStyle(Color.palsInk)
+        .foregroundStyle(color)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
         .accessibilityElement(children: .combine)

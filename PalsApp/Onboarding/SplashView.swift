@@ -1,23 +1,28 @@
 import SwiftUI
 
+/// Picks up exactly where LaunchScreen.storyboard leaves off (same color, same logo size and
+/// position), so the system launch screen and this view look like one continuous splash.
+/// It only adds a small bounce before the app moves on.
 struct SplashView: View {
-    @State private var appeared = false
+    @State private var bounce = false
 
     var body: some View {
         ZStack {
-            Color.palsIndigo.ignoresSafeArea()
+            Color.palsIndigo
             Image("SplashLogo")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 330)
-                .scaleEffect(appeared ? 1 : 0.85)
-                .opacity(appeared ? 1 : 0)
+                .scaleEffect(bounce ? 1.08 : 1)
                 .accessibilityLabel("Pals")
         }
-        .onAppear {
-            withAnimation(.spring(duration: 0.6, bounce: 0.4)) {
-                appeared = true
-            }
+        // Centered on the whole screen, like the storyboard, not inside the safe area.
+        .ignoresSafeArea()
+        .task {
+            try? await Task.sleep(for: .milliseconds(150))
+            withAnimation(.spring(duration: 0.25, bounce: 0.5)) { bounce = true }
+            try? await Task.sleep(for: .milliseconds(220))
+            withAnimation(.spring(duration: 0.4, bounce: 0.5)) { bounce = false }
         }
     }
 }

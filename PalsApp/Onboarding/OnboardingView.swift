@@ -20,7 +20,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.palsOffWhite.ignoresSafeArea()
+            Color.palsIndigo.ignoresSafeArea()
 
             TabView(selection: $selection) {
                 ForEach(pages) { page in
@@ -40,7 +40,7 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 ForEach(pages) { page in
                     Capsule()
-                        .fill(page.id == selection ? Color.palsBlue : Color.gray.opacity(0.3))
+                        .fill(page.id == selection ? Color.white : Color.white.opacity(0.3))
                         .frame(width: 20, height: 7)
                 }
             }
@@ -53,10 +53,13 @@ struct OnboardingView: View {
                 Button(action: onFinish) {
                     Text("Skip")
                         .font(.pals(15))
-                        .foregroundStyle(Color.palsInk)
-                        .padding(.horizontal, 6)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .contentShape(Capsule())
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
             }
         }
         .padding(.horizontal, 24)
@@ -94,7 +97,7 @@ private struct OnboardingPageView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            HighlightHeadline(lines: page.lines, highlight: page.highlight, size: 64)
+            HighlightHeadline(lines: page.lines, highlight: page.highlight, size: 64, color: .palsOffWhite)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)
                 .padding(.top, 64)
@@ -102,12 +105,12 @@ private struct OnboardingPageView: View {
             Button(action: onNext) {
                 Image(systemName: "arrow.right")
                     .font(.system(size: 30, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.palsIndigo)
                     .frame(width: 68, height: 68)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .glassEffect(.regular.tint(.palsBlue).interactive(), in: .circle)
+            .glassEffect(.regular.tint(.white).interactive(), in: .circle)
             .accessibilityLabel("Next")
             .padding(.top, 32)
 

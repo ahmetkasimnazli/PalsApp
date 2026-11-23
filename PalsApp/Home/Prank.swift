@@ -63,5 +63,5 @@ struct IncomingPrank: Identifiable, Equatable {
     /// Set when you just sent this prank; played on your screen as a confirmation.
     var sentTo: String?
     /// Subtitle on the "X slapped you!" card.
-    var reason = "…because you haven't done today's walk."
+    var reason = "…because you haven't done today's activity."
 }

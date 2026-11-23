@@ -1,32 +1,71 @@
 import SwiftUI
 
-/// Last onboarding screen before profile setup. No account needed: identity comes from
-/// the device's iCloud account later, so there's just one button to get going.
+/// Last onboarding screen before profile setup. There's no account to make: identity comes
+/// from the device's iCloud account, so this screen just sells the idea and gets you going.
 struct WelcomeView: View {
     var onContinue: () -> Void
+
+    private struct Point: Identifiable {
+        let id = UUID()
+        let icon: String
+        let text: String
+    }
+
+    private let points = [
+        Point(icon: "figure.walk", text: "Pick one small thing to do every day"),
+        Point(icon: "person.3.fill", text: "Do it with your pals, keep the streak"),
+        Point(icon: "hand.raised.fill", text: "Skip it, and they get to prank you"),
+    ]
 
     var body: some View {
         ZStack {
             Color.palsIndigo.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                Image("PalsLogo3D")
+            VStack(alignment: .leading, spacing: 0) {
+                Image("SplashLogo")
+                    .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 140)
-                    .padding(.top, 12)
+                    .foregroundStyle(Color.palsOffWhite)
+                    .frame(height: 56)
+                    .padding(.leading, -16)
                     .accessibilityLabel("Pals")
 
-                Spacer(minLength: 16)
+                HighlightHeadline(lines: ["Show up."], highlight: "Or get pranked.", size: 50, color: .palsOffWhite)
+                    .padding(.top, 14)
 
-                // Centered between the logo and the button.
                 Image("WelcomeGroup")
                     .resizable()
                     .scaledToFit()
-                    .padding(.horizontal, -20)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, -16)
+                    .padding(.vertical, 4)
+                    .layoutPriority(-1)
                     .accessibilityHidden(true)
 
-                Spacer(minLength: 24)
+                GlassEffectContainer(spacing: 8) {
+                    VStack(spacing: 8) {
+                        ForEach(points) { point in
+                            HStack(spacing: 14) {
+                                Image(systemName: point.icon)
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(Color.palsIndigo)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.palsOffWhite, in: Circle())
+                                Text(point.text)
+                                    .font(.pals(16))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.85)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(10)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                        }
+                    }
+                }
+
+                Spacer(minLength: 16)
 
                 Button(action: onContinue) {
                     HStack(spacing: 10) {
@@ -41,9 +80,16 @@ struct WelcomeView: View {
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.tint(.white).interactive(), in: .capsule)
-                .padding(.bottom, 12)
+
+                Label("No sign-up. Pals uses your iCloud account.", systemImage: "icloud.fill")
+                    .font(.palsBody(14))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 14)
+                    .padding(.bottom, 4)
             }
             .padding(.horizontal, 20)
+            .padding(.top, 8)
         }
     }
 }

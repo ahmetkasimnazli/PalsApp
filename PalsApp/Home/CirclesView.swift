@@ -15,7 +15,7 @@ struct CirclesView: View {
                     HighlightHeadline(lines: ["Your"], highlight: "circles.", size: 52)
                         .padding(.top, 12)
 
-                    Text("Each circle does one thing every day. Skip it, and your pals get to prank you.")
+                    Text("Every day each circle gets one activity from its pool. Skip it, and your pals get to prank you.")
                         .font(.palsBody(16))
                         .foregroundStyle(Color.palsInk.opacity(0.65))
                         .padding(.top, 10)
@@ -96,9 +96,10 @@ private struct CircleCard: View {
                         .foregroundStyle(Color.palsInk)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    Text(circle.activity)
+                    Text("Today: \(circle.today.emoji) \(circle.today.title)")
                         .font(.palsBody(15))
                         .foregroundStyle(Color.palsInk.opacity(0.6))
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 0)
@@ -174,6 +175,7 @@ private struct CircleDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var prankTarget: Friend?
+    @State private var addingActivity = false
 
     private var circle: PalsCircle? { model.circles.first { $0.id == circleID } }
 
@@ -201,6 +203,8 @@ private struct CircleDetailView: View {
 
                     activityCard(circle)
                         .padding(.top, 18)
+
+                    activitiesSection(circle)
 
                     Text("PALS")
                         .font(.pals(14))
@@ -240,6 +244,11 @@ private struct CircleDetailView: View {
             .scrollIndicators(.hidden)
             .background(Color.palsOffWhite.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $addingActivity) {
+                AddActivitySheet { activity in
+                    withAnimation { model.addActivity(activity, to: circleID) }
+                }
+            }
             .sheet(item: $prankTarget) { friend in
                 PrankSheet(
                     friend: model.friend(id: friend.id) ?? friend,
@@ -263,14 +272,21 @@ private struct CircleDetailView: View {
     }
 
     private func activityCard(_ circle: PalsCircle) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("TODAY'S ACTIVITY")
+        let today = circle.today
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("TODAY EVERYONE DOES")
                 .font(.pals(13))
                 .tracking(1)
                 .foregroundStyle(.white.opacity(0.7))
-            Text(circle.activity)
-                .font(.pals(28, weight: .bold))
-                .foregroundStyle(Color.palsOffWhite)
+            HStack(alignment: .center, spacing: 12) {
+                Text(today.emoji)
+                    .font(.system(size: 34))
+                Text(today.title)
+                    .font(.pals(28, weight: .bold))
+                    .foregroundStyle(Color.palsOffWhite)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
             HStack {
                 Text(circle.streak == 1 ? "🔥 1 day together" : "🔥 \(circle.streak) days together")
                 Spacer()
@@ -279,9 +295,59 @@ private struct CircleDetailView: View {
             .font(.pals(15))
             .foregroundStyle(.white.opacity(0.9))
             ProgressBar(value: model.progress(of: circle), color: .white)
+
+            if circle.pool.count > 1 {
+                let tomorrow = circle.tomorrow
+                Text("Tomorrow: \(tomorrow.emoji) \(tomorrow.title)")
+                    .font(.palsBody(14))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .padding(.top, 4)
+            }
         }
         .padding(20)
         .background(Color.palsIndigo, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private func activitiesSection(_ circle: PalsCircle) -> some View {
+        let todayID = circle.today.id
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("THE POOL")
+                .padding(.top, 26)
+            Text("Every day one of these is picked for everyone. Anyone can add more.")
+                .font(.palsBody(14))
+                .foregroundStyle(Color.palsInk.opacity(0.5))
+
+            ForEach(circle.pool) { activity in
+                ActivityRow(activity: activity, people: [], note: "· by \(activity.addedBy)") {
+                    if activity.id == todayID {
+                        Text("Today")
+                            .font(.pals(13))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.palsIndigo, in: Capsule())
+                    }
+                }
+            }
+
+            Button { addingActivity = true } label: {
+                Label("Add an activity", systemImage: "plus")
+                    .font(.pals(17))
+                    .foregroundStyle(Color.palsInk)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .padding(.top, 4)
+        }
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(.pals(14))
+            .tracking(1)
+            .foregroundStyle(Color.palsInk.opacity(0.5))
     }
 
     private var youRow: some View {
@@ -301,8 +367,9 @@ private struct CircleDetailView: View {
                     .rotationEffect(.degrees(-6))
                     .accessibilityLabel("Your proof photo")
             }
-            statusPill(model.completedToday ? "Done ✓" : "Not yet",
-                       done: model.completedToday)
+            if let circle {
+                statusPill(model.isDone(in: circle) ? "Done ✓" : "Not yet", done: model.isDone(in: circle))
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -370,15 +437,14 @@ private struct NewCircleSheet: View {
 
     @State private var name = ""
     @State private var emoji = "🎯"
-    @State private var activity = "Walk for 5 minutes"
+    @State private var picked: Set<String> = ["Walk for 5 minutes"]
     @State private var members = Set<Friend.ID>()
 
     private let emojis = ["🎯", "📚", "🧘", "🏃", "🎸", "🥗", "💧", "☀️"]
-    private let activities = ["Walk for 5 minutes", "Read 10 pages", "Meditate 5 minutes",
-                              "20 push-ups", "Drink 8 glasses of water", "No phone for 1 hour"]
+    private var activities: [String] { CircleActivity.suggestions.map(\.title) }
 
     private var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && !members.isEmpty
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !members.isEmpty && !picked.isEmpty
     }
 
     var body: some View {
@@ -424,8 +490,15 @@ private struct NewCircleSheet: View {
                     }
                 }
 
-                section("Daily activity") {
-                    FlowChips(items: activities, selected: activity) { activity = $0 }
+                section("Activity pool") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        FlowChips(items: activities, selected: picked) { item in
+                            if picked.contains(item) { picked.remove(item) } else { picked.insert(item) }
+                        }
+                        Text("Pick a few. Each day one of them is chosen for everyone, and anyone can add more later.")
+                            .font(.palsBody(13))
+                            .foregroundStyle(Color.palsInk.opacity(0.5))
+                    }
                 }
 
                 section("Pals") {
@@ -456,8 +529,8 @@ private struct NewCircleSheet: View {
                 }
 
                 Button {
-                    model.createCircle(name: name.trimmingCharacters(in: .whitespaces),
-                                       emoji: emoji, activity: activity, memberIDs: members)
+                    model.createCircle(name: name.trimmingCharacters(in: .whitespaces), emoji: emoji,
+                                       activities: activities.filter(picked.contains), memberIDs: members)
                     dismiss()
                 } label: {
                     Text("Create circle")
@@ -490,28 +563,29 @@ private struct NewCircleSheet: View {
 /// Wrapping row of selectable chips.
 private struct FlowChips: View {
     let items: [String]
-    let selected: String
+    let selected: Set<String>
     var onSelect: (String) -> Void
 
     var body: some View {
         FlowLayout(spacing: 8) {
             ForEach(items, id: \.self) { item in
+                let isOn = selected.contains(item)
                 Button { onSelect(item) } label: {
-                    Text(item)
+                    Text("\(CircleActivity.suggestion(item).emoji) \(item)")
                         .font(.pals(14))
-                        .foregroundStyle(item == selected ? .white : Color.palsInk)
+                        .foregroundStyle(isOn ? .white : Color.palsInk)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 9)
-                        .background(item == selected ? Color.palsBlue : .white, in: Capsule())
+                        .background(isOn ? Color.palsBlue : .white, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityAddTraits(item == selected ? .isSelected : [])
+                .accessibilityAddTraits(isOn ? .isSelected : [])
             }
         }
     }
 }
 
-private struct FlowLayout: Layout {
+struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

@@ -1,126 +1,94 @@
 import SwiftUI
 
+/// The only "sign-up" step: a name and an optional photo. That's all your pals see of you;
+/// your identity itself comes from iCloud, so there's no username or password.
 struct ProfileSetupView: View {
-    var onFinish: (_ name: String, _ username: String, _ photo: UIImage?) -> Void
+    var onFinish: (_ name: String, _ photo: UIImage?) -> Void
     var onSkip: () -> Void
 
     @State private var name = ""
-    @State private var username = ""
     @State private var photo: UIImage?
-    @FocusState private var focused: Field?
+    @FocusState private var nameFocused: Bool
 
-    private enum Field { case name, username }
-
-    /// Lowercased, without "@" or spaces — only letters, digits, "_" and ".".
-    private var cleanedUsername: String {
-        username.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." }
-    }
-
-    private var canContinue: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && !cleanedUsername.isEmpty
-    }
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+    private var canContinue: Bool { !trimmedName.isEmpty }
 
     var body: some View {
         ZStack {
-            Color.palsOffWhite
+            Color.palsIndigo
                 .ignoresSafeArea()
-                .onTapGesture { focused = nil }
+                .onTapGesture { nameFocused = false }
 
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: 0) {
-                    HighlightHeadline(lines: ["Set Up", "Your"], highlight: "Profile.", size: 48)
-                    BurstMarks()
-                        .padding(.top, 36)
-                    Spacer(minLength: 0)
+                HighlightHeadline(lines: ["What do your"], highlight: "pals call you?", size: 46, color: .palsOffWhite)
+                    .padding(.top, 48)
+
+                Spacer(minLength: 12)
+
+                VStack(spacing: 14) {
+                    // Smaller while typing so the field stays above the keyboard.
+                    ProfilePhotoPicker(photo: $photo, name: name, size: nameFocused ? 112 : 176)
+                    Text(photo == nil ? "Add a photo so your pals spot you on their orbit." : "Looking good.")
+                        .font(.palsBody(15))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .opacity(nameFocused ? 0 : 1)
                 }
-                .padding(.top, 64)
+                .frame(maxWidth: .infinity)
 
-                // Hidden while typing — there isn't enough room above the keyboard.
-                if focused == nil {
-                    ProfilePhotoPicker(photo: $photo)
-                        .frame(maxWidth: .infinity, maxHeight: 290)
-                        .padding(.horizontal, -12)
-                        .padding(.top, -16)
-                        .layoutPriority(-1)
-                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                }
+                Spacer(minLength: 12)
 
-                Spacer(minLength: 16)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    fieldLabel("Name")
-                    PalsTextField(placeholder: "Your name", text: $name)
-                        .focused($focused, equals: .name)
-                        .textContentType(.name)
-                        .submitLabel(.next)
-                        .onSubmit { focused = .username }
-
-                    fieldLabel("Username")
-                        .padding(.top, 12)
-                    PalsTextField(placeholder: "@ yourusername", text: $username)
-                        .focused($focused, equals: .username)
-                        .textContentType(.username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.go)
-                        .onSubmit(submit)
-                }
+                TextField("", text: $name, prompt: Text("Your name").foregroundStyle(.white.opacity(0.5)))
+                    .font(.pals(20))
+                    .foregroundStyle(.white)
+                    .tint(.white)
+                    .focused($nameFocused)
+                    .textContentType(.givenName)
+                    .submitLabel(.go)
+                    .onSubmit(submit)
+                    .padding(.horizontal, 22)
+                    .frame(height: 58)
+                    .glassEffect(.regular, in: .capsule)
+                    // The whole capsule focuses the field, not just the text line.
+                    .contentShape(Capsule())
+                    .onTapGesture { nameFocused = true }
 
                 Button(action: submit) {
                     HStack(spacing: 8) {
-                        Text("Let’s Go!")
+                        Text("Let’s go!")
                         Image(systemName: "arrow.right")
                             .fontWeight(.heavy)
                     }
                     .font(.pals(23, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .foregroundStyle(Color.palsIndigo)
+                    .frame(maxWidth: .infinity, minHeight: 64)
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .glassEffect(.regular.tint(.palsBlue.opacity(canContinue ? 1 : 0.45)).interactive(canContinue), in: .capsule)
+                .glassEffect(.regular.tint(.white).interactive(canContinue), in: .capsule)
+                .opacity(canContinue ? 1 : 0.5)
                 .disabled(!canContinue)
-                .padding(.top, 44)
+                .padding(.top, 14)
 
                 Button("Skip for now", action: onSkip)
                     .font(.pals(17))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(.white.opacity(0.6))
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 16)
-                    .padding(.bottom, 8)
+                    .padding(.top, 14)
+                    .padding(.bottom, 4)
             }
-            .padding(.horizontal, 24)
-            .animation(.easeInOut(duration: 0.25), value: focused)
+            .padding(.horizontal, 20)
+            .animation(.snappy, value: nameFocused)
+            .animation(.easeInOut, value: canContinue)
         }
-    }
-
-    private func fieldLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.pals(17))
-            .foregroundStyle(Color.palsInk)
-            .padding(.leading, 6)
     }
 
     private func submit() {
         guard canContinue else { return }
-        onFinish(name.trimmingCharacters(in: .whitespaces), cleanedUsername, photo)
-    }
-}
-
-private struct PalsTextField: View {
-    let placeholder: String
-    @Binding var text: String
-
-    var body: some View {
-        TextField(placeholder, text: $text)
-            .font(.palsBody(17))
-            .padding(.horizontal, 20)
-            .frame(height: 46)
-            .background(.white, in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.gray, lineWidth: 1))
+        onFinish(trimmedName, photo)
     }
 }
 
 #Preview {
-    ProfileSetupView(onFinish: { _, _, _ in }, onSkip: {})
+    ProfileSetupView(onFinish: { _, _ in }, onSkip: {})
 }
