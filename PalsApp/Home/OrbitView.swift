@@ -76,19 +76,6 @@ struct OrbitView: View {
     private var youView: some View {
         PalsAvatar(name: you, photo: photo, color: .palsIndigo, size: 140)
         .frame(width: 150, height: 150)
-        .overlay(alignment: .bottom) {
-            HStack(spacing: 4) {
-                Text("YOU")
-                Text("🔥 \(streak)")
-            }
-            .font(.pals(15, weight: .bold))
-            .foregroundStyle(Color.palsInk)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(.white, in: Capsule())
-            .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
-            .offset(y: 12)
-        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("You, \(streak) day streak, \(Int(progress * 100)) percent of your circle done today")
     }
