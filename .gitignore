@@ -1,0 +1,11 @@
+# Xcode per-user state
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Local tool config (not for the team)
+.mcp.json
+.claude/
