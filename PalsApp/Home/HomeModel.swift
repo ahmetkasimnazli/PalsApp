@@ -109,11 +109,16 @@ final class HomeModel {
     private(set) var freezes: Int = 2
     /// Circles where you've done today's activity.
     private(set) var doneCircles: Set<PalsCircle.ID> = []
+    /// Circles where you've drawn (flipped) today's card.
+    private(set) var revealedCircles: Set<PalsCircle.ID> = []
+    /// Bumped to ask the home screen to play the card draw (e.g. from the activity bar).
+    var drawRequests = 0
 
     private let defaults = UserDefaults.standard
     private static let streakKey = "streakDays"
     private static let lastCompletedKey = "lastCompletedDate"
     private static let myDoneKey = "myDoneToday"      // ["<day>|<circle name>"]
+    private static let revealedKey = "revealedToday"  // ["<day>|<circle name>"]
 
     init() {
         var close = PalsCircle(name: "Close Friends", emoji: "🫶", color: .palsIndigo, pool: [
@@ -159,6 +164,7 @@ final class HomeModel {
         streakDays = stillAlive ? defaults.integer(forKey: Self.streakKey) : 0
         if streakDays == 0 && lastCompleted == nil { streakDays = 12 } // demo value for the first run
         restoreDoneCircles()
+        revealedCircles = restore(Self.revealedKey)
 
         // Demo: until there's a backend, a pal "pranks" you whenever you open the app
         // without having done today's activity.
@@ -186,9 +192,26 @@ final class HomeModel {
     /// You've done today's activity in the circle on your orbit.
     var completedToday: Bool { isDone(in: selectedCircle) }
 
-    /// Opens today's activity in the circle on your orbit.
+    /// Opens today's activity in the circle on your orbit, or plays the card draw if it isn't drawn yet.
     func startActivity() {
+        guard isRevealed(selectedCircle) else {
+            drawRequests += 1
+            return
+        }
         activeActivity = selectedCircle.today
+    }
+
+    // MARK: - Today's card
+
+    /// Drawn today (doing the activity counts too).
+    func isRevealed(_ circle: PalsCircle) -> Bool {
+        revealedCircles.contains(circle.id) || doneCircles.contains(circle.id)
+    }
+
+    /// Marks today's card as drawn for this circle (it stays face up for the rest of the day).
+    func reveal(_ circle: PalsCircle) {
+        revealedCircles.insert(circle.id)
+        save(revealedCircles, to: Self.revealedKey)
     }
 
     func completeTodayActivity(in circleID: PalsCircle.ID? = nil) {
@@ -294,7 +317,9 @@ final class HomeModel {
             fromColor: pranker.color,
             reason: completedToday
                 ? "…just for fun. You already did yours today 😇"
-                : "…because you haven't done today's \(selectedCircle.today.title.lowercased())."
+                : (isRevealed(selectedCircle)
+                    ? "…because you haven't done today's \(selectedCircle.today.title.lowercased())."
+                    : "…because you haven't even drawn today's card.")
         )
     }
 
@@ -305,6 +330,8 @@ final class HomeModel {
         proofPhoto = nil
         doneCircles = []
         saveDoneCircles()
+        revealedCircles = []
+        save(revealedCircles, to: Self.revealedKey)
         let last = defaults.object(forKey: Self.lastCompletedKey) as? Date
         if last.map(Calendar.current.isDateInToday) ?? false {
             streakDays = max(0, streakDays - 1)
@@ -323,6 +350,23 @@ final class HomeModel {
         let day = PalsDay.key(.now)
         let entries = circles.filter { doneCircles.contains($0.id) }.map { "\(day)|\($0.name)" }
         defaults.set(entries, forKey: Self.myDoneKey)
+    }
+
+    private func save(_ ids: Set<PalsCircle.ID>, to key: String) {
+        let day = PalsDay.key(.now)
+        defaults.set(circles.filter { ids.contains($0.id) }.map { "\(day)|\($0.name)" }, forKey: key)
+    }
+
+    private func restore(_ key: String) -> Set<PalsCircle.ID> {
+        let day = PalsDay.key(.now)
+        var ids = Set<PalsCircle.ID>()
+        for entry in defaults.stringArray(forKey: key) ?? [] {
+            let parts = entry.split(separator: "|", maxSplits: 1).map(String.init)
+            guard parts.count == 2, parts[0] == day,
+                  let circle = circles.first(where: { $0.name == parts[1] }) else { continue }
+            ids.insert(circle.id)
+        }
+        return ids
     }
 
     private func restoreDoneCircles() {

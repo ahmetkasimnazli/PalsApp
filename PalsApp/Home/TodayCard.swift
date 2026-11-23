@@ -15,7 +15,6 @@ struct TodayCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            todayActivity
             header
             segments
             Rectangle()
@@ -95,39 +94,6 @@ struct TodayCard: View {
             }
         }
         .accessibilityHidden(true)
-    }
-
-    /// The one activity everyone in the circle does today, and who already did it.
-    private var todayActivity: some View {
-        let activity = circle.today
-        var people = circle.friends.filter(\.doneToday)
-        if youDone { people.insert(Friend(name: "You", color: .palsIndigo, isActive: true, doneToday: true), at: 0) }
-        return HStack(spacing: 14) {
-            Text(activity.emoji)
-                .font(.system(size: 34))
-                .frame(width: 64, height: 64)
-                .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("TODAY EVERYONE DOES")
-                    .font(.pals(12))
-                    .tracking(1)
-                    .foregroundStyle(.white.opacity(0.6))
-                Text(activity.title)
-                    .font(.pals(22, weight: .bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                HStack(spacing: 8) {
-                    Label(activity.durationLabel, systemImage: activity.minutes == nil ? "checkmark.circle" : "timer")
-                        .font(.palsBody(13))
-                        .foregroundStyle(.white.opacity(0.7))
-                    MiniAvatars(people: people, size: 20)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private func skippedRow(_ friend: Friend) -> some View {

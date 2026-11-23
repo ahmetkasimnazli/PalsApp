@@ -46,6 +46,9 @@ struct HomeView: View {
                 .frame(height: 300)
                 .padding(.horizontal, -8)
 
+                DailyCardView(model: model)
+                    .padding(.top, 6)
+
                 TodayCard(
                     circle: model.selectedCircle,
                     youDone: model.completedToday,

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Silly punishments you can send to a pal who skipped today's activity.
 enum PrankKind: String, CaseIterable, Identifiable, Hashable {
-    case slap, egg
+    case slap, egg, italian, iceBucket
 
     var id: String { rawValue }
 
@@ -10,6 +10,8 @@ enum PrankKind: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .slap: "👋"
         case .egg: "🥚"
+        case .italian: "🤌"
+        case .iceBucket: "🧊"
         }
     }
 
@@ -17,6 +19,8 @@ enum PrankKind: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .slap: "Slap"
         case .egg: "Egg"
+        case .italian: "Ma che fai"
+        case .iceBucket: "Ice bucket"
         }
     }
 
@@ -25,6 +29,8 @@ enum PrankKind: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .slap: "A loud one, right across the screen."
         case .egg: "Cracked on their head. Yolk everywhere."
+        case .italian: "The Italian hand. What are you doing?!"
+        case .iceBucket: "A bucket of ice water, head to toe."
         }
     }
 
@@ -33,6 +39,8 @@ enum PrankKind: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .slap: "SLAP!"
         case .egg: "CRACK!"
+        case .italian: "MA CHE FAI?!"
+        case .iceBucket: "BRRR!"
         }
     }
 
@@ -41,6 +49,8 @@ enum PrankKind: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .slap: "slapped"
         case .egg: "egged"
+        case .italian: "told off"
+        case .iceBucket: "iced"
         }
     }
 
@@ -48,6 +58,8 @@ enum PrankKind: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .slap: "\(name) slapped you!"
         case .egg: "\(name) egged you!"
+        case .italian: "\(name): ma che fai?! 🤌"
+        case .iceBucket: "\(name) iced you! 🥶"
         }
     }
 }

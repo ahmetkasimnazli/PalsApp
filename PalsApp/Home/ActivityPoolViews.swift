@@ -176,6 +176,8 @@ struct ActivityRow<Trailing: View>: View {
 struct MiniAvatars: View {
     let people: [Friend]
     var size: CGFloat = 24
+    /// Off inside transformed views (e.g. a flipping card), where Liquid Glass misrenders.
+    var glass = true
 
     var body: some View {
         if !people.isEmpty {
@@ -183,9 +185,9 @@ struct MiniAvatars: View {
                 ForEach(people.prefix(4)) { person in
                     if person.name == "You" {
                         PalsAvatar(name: UserDefaults.standard.string(forKey: "profileName") ?? "You",
-                                   photo: ProfilePhotoStore.load(), size: size)
+                                   photo: ProfilePhotoStore.load(), size: size, glass: glass)
                     } else {
-                        PalsAvatar(name: person.name, color: person.color, size: size)
+                        PalsAvatar(name: person.name, color: person.color, size: size, glass: glass)
                     }
                 }
                 if people.count > 4 {

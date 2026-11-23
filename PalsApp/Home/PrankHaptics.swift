@@ -41,6 +41,27 @@ final class PrankHaptics {
                 ramp(.hapticIntensityControl, from: 1, to: 0, at: t + 0.05, over: 0.45),
             ])
 
+        case .italian:
+            // The hand comes up, then a rhythmic shake: one firm tap per pump of the wrist.
+            let pumps = (0..<5).map { i in
+                transient(intensity: i == 0 ? 0.9 : 0.6, sharpness: 0.55, at: t + Double(i) * 0.36)
+            }
+            return try CHHapticPattern(events: [
+                continuous(intensity: 0.3, sharpness: 0.2, at: max(0, t - 0.3), duration: 0.3),
+            ] + pumps, parameterCurves: [])
+
+        case .iceBucket:
+            // The splash, then the pour rumbling out, with ice cubes clattering through it.
+            let cubes = [0.12, 0.27, 0.38, 0.55, 0.71, 0.9].map {
+                transient(intensity: 0.45, sharpness: 0.9, at: t + $0)
+            }
+            return try CHHapticPattern(events: [
+                transient(intensity: 1, sharpness: 0.6, at: t),
+                continuous(intensity: 0.8, sharpness: 0.25, at: t, duration: 1.1),
+            ] + cubes, parameterCurves: [
+                ramp(.hapticIntensityControl, from: 1, to: 0, at: t, over: 1.1),
+            ])
+
         case .egg:
             return try CHHapticPattern(events: [
                 // Shell cracking: two quick, sharp taps.

@@ -24,6 +24,7 @@ struct CirclesView: View {
                         ForEach(model.circles) { circle in
                             NavigationLink(value: circle.id) {
                                 CircleCard(circle: circle,
+                                           revealed: model.isRevealed(circle),
                                            progress: model.progress(of: circle),
                                            done: model.doneCount(in: circle),
                                            isHome: circle.id == model.selectedCircleID)
@@ -70,6 +71,7 @@ struct CirclesView: View {
 
 private struct CircleCard: View {
     let circle: PalsCircle
+    let revealed: Bool
     let progress: Double
     let done: Int
     let isHome: Bool
@@ -96,7 +98,7 @@ private struct CircleCard: View {
                         .foregroundStyle(Color.palsInk)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    Text("Today: \(circle.today.emoji) \(circle.today.title)")
+                    Text(revealed ? "Today: \(circle.today.emoji) \(circle.today.title)" : "Today: 🃏 card not drawn yet")
                         .font(.palsBody(15))
                         .foregroundStyle(Color.palsInk.opacity(0.6))
                         .lineLimit(1)
@@ -272,6 +274,7 @@ private struct CircleDetailView: View {
     }
 
     private func activityCard(_ circle: PalsCircle) -> some View {
+        let revealed = model.isRevealed(circle)
         let today = circle.today
         return VStack(alignment: .leading, spacing: 10) {
             Text("TODAY EVERYONE DOES")
@@ -279,9 +282,9 @@ private struct CircleDetailView: View {
                 .tracking(1)
                 .foregroundStyle(.white.opacity(0.7))
             HStack(alignment: .center, spacing: 12) {
-                Text(today.emoji)
+                Text(revealed ? today.emoji : "🃏")
                     .font(.system(size: 34))
-                Text(today.title)
+                Text(revealed ? today.title : "Card not drawn yet")
                     .font(.pals(28, weight: .bold))
                     .foregroundStyle(Color.palsOffWhite)
                     .lineLimit(2)
@@ -296,9 +299,8 @@ private struct CircleDetailView: View {
             .foregroundStyle(.white.opacity(0.9))
             ProgressBar(value: model.progress(of: circle), color: .white)
 
-            if circle.pool.count > 1 {
-                let tomorrow = circle.tomorrow
-                Text("Tomorrow: \(tomorrow.emoji) \(tomorrow.title)")
+            if !revealed {
+                Text("Draw it from the deck on your Orbit.")
                     .font(.palsBody(14))
                     .foregroundStyle(.white.opacity(0.75))
                     .padding(.top, 4)
@@ -309,11 +311,12 @@ private struct CircleDetailView: View {
     }
 
     private func activitiesSection(_ circle: PalsCircle) -> some View {
-        let todayID = circle.today.id
+        // Only mark today's activity once its card has been drawn.
+        let todayID = model.isRevealed(circle) ? circle.today.id : nil
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("THE POOL")
                 .padding(.top, 26)
-            Text("Every day one of these is picked for everyone. Anyone can add more.")
+            Text("The deck. Every day one card is drawn for everyone. Anyone can add more.")
                 .font(.palsBody(14))
                 .foregroundStyle(Color.palsInk.opacity(0.5))
 

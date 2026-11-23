@@ -40,7 +40,10 @@ struct MainTabView: View {
             }
             // Today's activity is always one tap away, above the tab bar on every tab.
             .tabViewBottomAccessory {
-                ActivityAccessory(activity: model.selectedCircle.today, done: model.completedToday) {
+                ActivityAccessory(activity: model.selectedCircle.today, done: model.completedToday,
+                                  revealed: model.isRevealed(model.selectedCircle)) {
+                    // The draw plays on the Orbit tab.
+                    if !model.isRevealed(model.selectedCircle) { tab = .orbit }
                     model.startActivity()
                 }
             }
@@ -114,6 +117,7 @@ struct MainTabView: View {
 private struct ActivityAccessory: View {
     let activity: CircleActivity
     let done: Bool
+    let revealed: Bool
     var onTap: () -> Void
 
     var body: some View {
@@ -124,15 +128,15 @@ private struct ActivityAccessory: View {
                         .font(.system(size: 28))
                         .foregroundStyle(Color(hex: 0x22C55E))
                 } else {
-                    Text(activity.emoji)
+                    Text(revealed ? activity.emoji : "🃏")
                         .font(.system(size: 26))
                 }
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(done ? "Done for today" : "Today's activity")
+                    Text(done ? "Done for today" : (revealed ? "Today's activity" : "Today's card"))
                         .font(.palsBody(12))
                         .foregroundStyle(.secondary)
-                    Text(activity.title)
+                    Text(revealed ? activity.title : "Not drawn yet")
                         .font(.pals(16))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -146,8 +150,8 @@ private struct ActivityAccessory: View {
                         .foregroundStyle(Color(hex: 0x22C55E))
                 } else {
                     HStack(spacing: 4) {
-                        Image(systemName: "play.fill")
-                        Text("Start")
+                        Image(systemName: revealed ? "play.fill" : "rectangle.stack.fill")
+                        Text(revealed ? "Start" : "Draw")
                     }
                     .font(.pals(15, weight: .bold))
                     .foregroundStyle(.white)

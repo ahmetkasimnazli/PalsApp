@@ -52,11 +52,12 @@ struct PrankSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             HighlightHeadline(lines: ["\(friend.name) skipped."], highlight: "Prank them.", size: 42)
 
-            Text("They haven't done today's walk yet. Pick a punishment — it plays on their screen the next time they open Pals.")
+            Text("They haven't done today's activity yet. Pick a punishment — it plays on their screen the next time they open Pals.")
                 .font(.palsBody(16))
                 .foregroundStyle(Color.palsInk.opacity(0.7))
 
-            HStack(spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                      spacing: 10) {
                 ForEach(PrankKind.allCases) { kind in
                     option(kind)
                 }
@@ -99,18 +100,20 @@ struct PrankSheet: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(kind.emoji)
-                    .font(.system(size: 52))
+                    .font(.system(size: 40))
                     .rotationEffect(.degrees(isSelected ? -10 : 0))
                 Text(kind.title)
-                    .font(.palsDisplay(24))
+                    .font(.palsDisplay(20))
                     .foregroundStyle(Color.palsInk)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
                 Text(kind.pitch)
                     .font(.palsBody(13))
                     .foregroundStyle(Color.palsInk.opacity(0.65))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(isSelected ? Color.palsBlue.opacity(0.1) : .white)

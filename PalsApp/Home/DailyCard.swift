@@ -1,0 +1,300 @@
+import SwiftUI
+
+/// Today's activity as a card drawn from the circle's deck. Until you draw it, it's a face-down
+/// pile; tap it and the deck shuffles, then the top card flips over. It stays face up for the day.
+struct DailyCardView: View {
+    @Bindable var model: HomeModel
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// 0 shows the back, 180 the face.
+    @State private var angle: Double = 0
+    @State private var fanned = false
+    @State private var drawing = false
+    @State private var lifted = false
+    @State private var shuffleTicks = 0
+    @State private var revealTicks = 0
+
+    private var circle: PalsCircle { model.selectedCircle }
+    private var revealed: Bool { model.isRevealed(circle) }
+    private static let height: CGFloat = 214
+
+    var body: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                // The rest of the deck, peeking out behind.
+                ForEach(0..<2, id: \.self) { i in
+                    CardBack()
+                        .frame(height: Self.height)
+                        .scaleEffect(i == 0 ? 0.9 : 0.95)
+                        .rotationEffect(.degrees(fanned ? (i == 0 ? -11 : 9) : (i == 0 ? -3 : 2)))
+                        .offset(x: fanned ? (i == 0 ? -46 : 46) : 0, y: fanned ? 6 : (i == 0 ? 18 : 9))
+                        .brightness(revealed ? -0.12 : 0)
+                }
+
+                FlipCard(
+                    angle: angle,
+                    front: CardFace(activity: circle.today, circle: circle,
+                                    people: model.peopleDone(in: circle),
+                                    done: model.doneCount(in: circle),
+                                    total: circle.friends.count + 1,
+                                    youDone: model.isDone(in: circle)),
+                    back: CardBack(showsPrompt: !drawing)
+                )
+                .frame(height: Self.height)
+                .scaleEffect(lifted ? 1.04 : 1)
+                .offset(y: lifted ? -8 : 0)
+                .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .onTapGesture {
+                    if revealed { model.startActivity() } else { draw() }
+                }
+            }
+            .padding(.bottom, 14)
+
+            if !revealed {
+                Text(drawing ? "Shuffling…" : "Tap the deck to draw today's card")
+                    .font(.pals(14))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .contentTransition(.opacity)
+            }
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: shuffleTicks)
+        .sensoryFeedback(.success, trigger: revealTicks)
+        .onAppear { angle = revealed ? 180 : 0 }
+        .onChange(of: model.selectedCircleID) {
+            // Another circle's deck: show it as it is, no animation.
+            angle = revealed ? 180 : 0
+            fanned = false
+            lifted = false
+        }
+        .onChange(of: model.drawRequests) { draw() }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(revealed ? "Today's card: \(circle.today.title)" : "Today's card, face down")
+        .accessibilityHint(revealed ? "Starts today's activity" : "Draws today's card")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func draw() {
+        guard !revealed, !drawing else { return }
+        drawing = true
+        let drawnCircle = circle
+        Task {
+            if !reduceMotion {
+                // Shuffle: the deck fans out and snaps back together, twice.
+                for _ in 0..<2 {
+                    withAnimation(.spring(duration: 0.22, bounce: 0.3)) { fanned = true }
+                    shuffleTicks += 1
+                    try? await Task.sleep(for: .milliseconds(230))
+                    withAnimation(.spring(duration: 0.22, bounce: 0.3)) { fanned = false }
+                    shuffleTicks += 1
+                    try? await Task.sleep(for: .milliseconds(230))
+                }
+                withAnimation(.spring(duration: 0.25)) { lifted = true }
+                try? await Task.sleep(for: .milliseconds(180))
+                withAnimation(.spring(duration: 0.7, bounce: 0.25)) { angle = 180 }
+                try? await Task.sleep(for: .milliseconds(450))
+                withAnimation(.spring(duration: 0.4, bounce: 0.4)) { lifted = false }
+            } else {
+                withAnimation(.easeInOut(duration: 0.3)) { angle = 180 }
+            }
+            revealTicks += 1
+            model.reveal(drawnCircle)
+            drawing = false
+        }
+    }
+}
+
+// MARK: - Flip
+
+/// Shows `back` until the card has turned half way, then `front` (un-mirrored), turning in 3D.
+private struct FlipCard<Front: View, Back: View>: View, Animatable {
+    var angle: Double
+    let front: Front
+    let back: Back
+
+    var animatableData: Double {
+        get { angle }
+        set { angle = newValue }
+    }
+
+    var body: some View {
+        ZStack {
+            back.opacity(angle < 90 ? 1 : 0)
+            front
+                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                .opacity(angle >= 90 ? 1 : 0)
+        }
+        .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
+    }
+}
+
+// MARK: - Faces
+
+/// The back of every card: brand pink with a dotted pattern and a big question mark.
+private struct CardBack: View {
+    var showsPrompt = true
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.palsPink)
+            Canvas { context, size in
+                let step: CGFloat = 16
+                for x in stride(from: step / 2, to: size.width, by: step) {
+                    for y in stride(from: step / 2, to: size.height, by: step) {
+                        context.fill(Path(ellipseIn: CGRect(x: x - 2, y: y - 2, width: 4, height: 4)),
+                                     with: .color(.white.opacity(0.18)))
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+
+            Text("?")
+                .font(.palsDisplay(72))
+                .foregroundStyle(Color.palsPink)
+                .frame(width: 112, height: 112)
+                .background(.white, in: Circle())
+
+            VStack {
+                HStack {
+                    Text("TODAY'S CARD")
+                    Spacer()
+                }
+                Spacer()
+            }
+            .font(.pals(12))
+            .tracking(1.5)
+            .foregroundStyle(.white.opacity(0.85))
+            .padding(20)
+            .opacity(showsPrompt ? 1 : 0.6)
+        }
+        .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
+    }
+}
+
+/// The face of a card: the activity on its own colour, with big bold shapes behind it.
+private struct CardFace: View {
+    let activity: CircleActivity
+    let circle: PalsCircle
+    let people: [Friend]
+    let done: Int
+    let total: Int
+    let youDone: Bool
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(activity.cardColor)
+            CardArt(pattern: activity.cardPattern)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("TODAY · \(circle.name.uppercased())")
+                        .font(.pals(12))
+                        .tracking(1.2)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                    Spacer()
+                    if youDone {
+                        Label("Done", systemImage: "checkmark")
+                            .font(.pals(13, weight: .bold))
+                            .foregroundStyle(activity.cardColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(.white, in: Capsule())
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Text(activity.emoji)
+                    .font(.system(size: 44))
+                Text(activity.title)
+                    .font(.palsDisplay(28))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+                    .padding(.top, 2)
+
+                HStack(spacing: 10) {
+                    Label(activity.durationLabel, systemImage: activity.minutes == nil ? "checkmark.circle" : "timer")
+                        .font(.pals(13))
+                    MiniAvatars(people: people, size: 22, glass: false)
+                    Spacer()
+                    Text("\(done)/\(total) done")
+                        .font(.pals(13, weight: .bold))
+                }
+                .foregroundStyle(.white.opacity(0.9))
+                .padding(.top, 10)
+            }
+            .padding(20)
+        }
+        .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
+    }
+}
+
+/// Bold abstract shapes on the right of a card, one of a few patterns per activity.
+private struct CardArt: View {
+    let pattern: Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            let h = proxy.size.height
+            let tint = Color.white.opacity(0.2)
+            ZStack(alignment: .trailing) {
+                switch pattern {
+                case 0:
+                    // Two big overlapping circles.
+                    Circle().fill(tint).frame(width: h * 1.0).offset(x: h * 0.28, y: -h * 0.05)
+                    Circle().fill(tint).frame(width: h * 0.75).offset(x: -h * 0.42, y: h * 0.12)
+                case 1:
+                    // Three half-moons in a row.
+                    ForEach(0..<3, id: \.self) { i in
+                        HalfDisc().fill(tint)
+                            .frame(width: h * 0.42, height: h * 0.84)
+                            .offset(x: -CGFloat(i) * h * 0.34 + h * 0.05)
+                    }
+                default:
+                    // A thick ring with a dot.
+                    Circle().stroke(tint, lineWidth: h * 0.16).frame(width: h * 0.95).offset(x: h * 0.3)
+                    Circle().fill(tint).frame(width: h * 0.22).offset(x: -h * 0.55, y: -h * 0.24)
+                }
+            }
+            .frame(width: proxy.size.width, height: h, alignment: .trailing)
+        }
+    }
+}
+
+private struct HalfDisc: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addArc(center: CGPoint(x: rect.maxX, y: rect.midY), radius: rect.height / 2,
+                    startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Card look per activity
+
+extension CircleActivity {
+    /// Stable per title, so an activity's card always looks the same for everyone.
+    private var cardSeed: Int {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in title.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+        return Int(hash % 1_000_003)
+    }
+
+    var cardColor: Color {
+        let palette: [UInt32] = [0xFF5A36, 0x7B5CFF, 0x14B8A6, 0xFD3D9C, 0x2F80ED, 0x22A06B]
+        return Color(hex: palette[cardSeed % palette.count])
+    }
+
+    var cardPattern: Int { (cardSeed / 7) % 3 }
+}
+
+#Preview {
+    DailyCardView(model: HomeModel())
+        .padding()
+        .background(Color.palsIndigo)
+}
