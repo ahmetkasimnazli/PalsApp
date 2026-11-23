@@ -7,6 +7,8 @@ struct PalsAvatar: View {
     var photo: UIImage?
     var color: Color = .palsIndigo
     var size: CGFloat = 64
+    /// Liquid Glass ring; turn off inside transformed drawings (glass misrenders when rotated/scaled).
+    var glass = true
 
     var body: some View {
         ZStack {
@@ -30,7 +32,10 @@ struct PalsAvatar: View {
         .clipShape(Circle())
         // Glass ring: the photo sits inside a slightly larger glass disc.
         .padding(ring)
-        .glassEffect(.regular, in: .circle)
+        .background {
+            if !glass { Circle().fill(.white) }
+        }
+        .glassEffect(glass ? .regular : .identity, in: .circle)
         .frame(width: size, height: size)
         .accessibilityLabel(name)
     }

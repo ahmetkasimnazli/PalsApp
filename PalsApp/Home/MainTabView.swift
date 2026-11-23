@@ -13,6 +13,9 @@ struct MainTabView: View {
     @State private var circlesPath: [PalsCircle.ID] = []
     @State private var playingPrank: IncomingPrank?
     @State private var shakes: CGFloat = 0
+    /// A quick zoom "punch" of the whole app on impact.
+    @State private var punched = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -51,6 +54,7 @@ struct MainTabView: View {
             // Orbit sits on brand blue: light status bar, dark tab-bar glass there.
             .preferredColorScheme(tab == .orbit ? .dark : .light)
             .modifier(ShakeEffect(animatableData: shakes))
+            .scaleEffect(punched ? 1.06 : 1)
             // Interactive glass buttons underneath could otherwise catch taps meant for the prank card.
             .allowsHitTesting(playingPrank == nil)
 
@@ -59,6 +63,12 @@ struct MainTabView: View {
                     prank: prank,
                     onImpact: {
                         withAnimation(.linear(duration: 0.45)) { shakes += 1 }
+                        guard !reduceMotion else { return }
+                        withAnimation(.spring(duration: 0.12)) { punched = true }
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(120))
+                            withAnimation(.spring(duration: 0.45, bounce: 0.5)) { punched = false }
+                        }
                     },
                     onStartActivity: {
                         finishPrank()
@@ -74,6 +84,10 @@ struct MainTabView: View {
                 .transition(.opacity)
                 .zIndex(1)
             }
+        }
+        .task {
+            // Compile the impact shader up front; compiling it on first use stalls the prank.
+            try? await ShaderLibrary.impactWave(.float2(0, 0), .float(0), .float(0)).compile(as: .layerEffect)
         }
         .task {
             // Pranks play when you open the app — give the home screen a moment first.
