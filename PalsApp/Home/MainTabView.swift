@@ -36,6 +36,13 @@ struct MainTabView: View {
                                    onRestartOnboarding: onRestartOnboarding)
                 }
             }
+            // Today's activity is always one tap away, above the tab bar on every tab.
+            .tabViewBottomAccessory {
+                ActivityAccessory(activity: model.selectedCircle.activity,
+                                  done: model.completedToday) {
+                    model.showingActivity = true
+                }
+            }
             .tint(tab == .orbit ? .white : .palsBlue)
             // Orbit sits on brand blue: light status bar, dark tab-bar glass there.
             .preferredColorScheme(tab == .orbit ? .dark : .light)
@@ -82,6 +89,58 @@ struct MainTabView: View {
     private func finishPrank() {
         model.incomingPrank = nil
         withAnimation(.easeOut(duration: 0.3)) { playingPrank = nil }
+    }
+}
+
+/// Compact "today's activity" bar shown in the tab bar's accessory slot.
+private struct ActivityAccessory: View {
+    let activity: String
+    let done: Bool
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: done ? "checkmark.circle.fill" : "figure.walk.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(done ? Color(hex: 0x22C55E) : Color.primary)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(done ? "Done for today" : "Today's activity")
+                        .font(.palsBody(12))
+                        .foregroundStyle(.secondary)
+                    Text(activity)
+                        .font(.pals(16))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                if done {
+                    Text("✓")
+                        .font(.pals(16, weight: .bold))
+                        .foregroundStyle(Color(hex: 0x22C55E))
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "play.fill")
+                        Text("Start")
+                    }
+                    .font(.pals(15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Color.palsBlue, in: Capsule())
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Faint white frost over the system glass capsule (no color tint).
+            .background(.white.opacity(0.30), in: Capsule())
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(done ? "Done for today: \(activity)" : "Start today's activity: \(activity)")
     }
 }
 

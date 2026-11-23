@@ -43,9 +43,6 @@ struct HomeView: View {
 
                 streakCard
                     .padding(.top, 14)
-
-                startButton
-                    .padding(.top, 20)
                     .padding(.bottom, 24)
             }
             .padding(.horizontal, 20)
@@ -194,23 +191,6 @@ struct HomeView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var startButton: some View {
-        Button {
-            model.showingActivity = true
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: model.completedToday ? "checkmark" : "play.fill")
-                    .fontWeight(.heavy)
-                Text(model.completedToday ? "Done for today!" : "Start Activity")
-            }
-            .font(.pals(23, weight: .bold))
-            .foregroundStyle(model.completedToday ? .white : Color.palsIndigo)
-            .frame(maxWidth: .infinity, minHeight: 64)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.tint(model.completedToday ? Color.palsInk.opacity(0.6) : .white).interactive(), in: .capsule)
-    }
 }
 
 #Preview {
