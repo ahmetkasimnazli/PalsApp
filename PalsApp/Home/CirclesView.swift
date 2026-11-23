@@ -316,22 +316,12 @@ private struct CircleDetailView: View {
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("THE POOL")
                 .padding(.top, 26)
-            Text("The deck. Every day one card is drawn for everyone. Anyone can add more.")
+            Text("Every day one card is drawn from this deck for everyone. Tap to fan it out; anyone can add a card.")
                 .font(.palsBody(14))
                 .foregroundStyle(Color.palsInk.opacity(0.5))
 
-            ForEach(circle.pool) { activity in
-                ActivityRow(activity: activity, people: [], note: "· by \(activity.addedBy)") {
-                    if activity.id == todayID {
-                        Text("Today")
-                            .font(.pals(13))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.palsIndigo, in: Capsule())
-                    }
-                }
-            }
+            PoolDeck(pool: circle.pool, todayID: todayID)
+                .padding(.top, 6)
 
             Button { addingActivity = true } label: {
                 Label("Add an activity", systemImage: "plus")
@@ -493,11 +483,9 @@ private struct NewCircleSheet: View {
                     }
                 }
 
-                section("Activity pool") {
+                section("What will you do together?") {
                     VStack(alignment: .leading, spacing: 10) {
-                        FlowChips(items: activities, selected: picked) { item in
-                            if picked.contains(item) { picked.remove(item) } else { picked.insert(item) }
-                        }
+                        PassionPicker(picked: $picked)
                         Text("Pick a few. Each day one of them is chosen for everyone, and anyone can add more later.")
                             .font(.palsBody(13))
                             .foregroundStyle(Color.palsInk.opacity(0.5))

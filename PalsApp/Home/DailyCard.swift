@@ -234,7 +234,7 @@ private struct CardFace: View {
 }
 
 /// Bold abstract shapes on the right of a card, one of a few patterns per activity.
-private struct CardArt: View {
+struct CardArt: View {
     let pattern: Int
 
     var body: some View {
@@ -265,7 +265,7 @@ private struct CardArt: View {
     }
 }
 
-private struct HalfDisc: Shape {
+struct HalfDisc: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.addArc(center: CGPoint(x: rect.maxX, y: rect.midY), radius: rect.height / 2,

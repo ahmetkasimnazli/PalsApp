@@ -30,7 +30,7 @@ struct MainTabView: View {
                     CirclesView(model: model, path: $circlesPath) { tab = .orbit }
                 }
                 Tab("Progress", systemImage: "chart.bar", value: AppTab.progress) {
-                    ComingSoonView(lines: ["Your"], highlight: "progress.")
+                    ProgressDeckView(model: model)
                 }
                 Tab("Profile", systemImage: "person", value: AppTab.profile) {
                     ProfileTabView(name: name, photo: photo,

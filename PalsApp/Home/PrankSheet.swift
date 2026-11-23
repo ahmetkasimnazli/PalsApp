@@ -52,17 +52,19 @@ struct PrankSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             HighlightHeadline(lines: ["\(friend.name) skipped."], highlight: "Prank them.", size: 42)
 
-            Text("They haven't done today's activity yet. Pick a punishment — it plays on their screen the next time they open Pals.")
+            Text("They haven't done today's activity yet. Pick a card — it plays on their screen the next time they open Pals.")
                 .font(.palsBody(16))
                 .foregroundStyle(Color.palsInk.opacity(0.7))
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
-                      spacing: 10) {
-                ForEach(PrankKind.allCases) { kind in
-                    option(kind)
-                }
-            }
-            .padding(.top, 4)
+            PrankFan(selected: $selected, target: friend)
+                .padding(.top, 4)
+
+            Text(selected.pitch)
+                .font(.palsBody(15))
+                .foregroundStyle(Color.palsInk.opacity(0.7))
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
+                .contentTransition(.opacity)
 
             Button {
                 onSend(selected)

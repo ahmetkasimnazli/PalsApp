@@ -10,6 +10,7 @@ struct AddActivitySheet: View {
     @State private var title = ""
     @State private var emoji = "✨"
     @State private var minutes: Int?
+    @State private var category: ActivityCategory?
 
     private let emojis = ["✨", "🚶", "🏃", "📚", "🧘", "💪", "🤸", "🧎", "💧", "🥗", "🎸", "📵", "😴", "🧹"]
     private let timers: [Int?] = [nil, 1, 5, 10, 15, 30]
@@ -26,21 +27,32 @@ struct AddActivitySheet: View {
                 }
 
                 section("Ideas") {
-                    FlowLayout(spacing: 8) {
-                        ForEach(CircleActivity.suggestions) { idea in
-                            Button {
-                                title = idea.title
-                                emoji = idea.emoji
-                                minutes = idea.minutes
-                            } label: {
-                                Text("\(idea.emoji) \(idea.title)")
-                                    .font(.pals(14))
-                                    .foregroundStyle(idea.title == title ? .white : Color.palsInk)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(idea.title == title ? Color.palsBlue : .white, in: Capsule())
+                    VStack(alignment: .leading, spacing: 12) {
+                        CategoryBlob(selected: $category)
+                        if let category {
+                            FlowLayout(spacing: 8) {
+                                ForEach(category.ideas, id: \.title) { idea in
+                                    let isOn = idea.title == title
+                                    Button {
+                                        title = idea.title
+                                        emoji = idea.emoji
+                                        minutes = idea.minutes
+                                    } label: {
+                                        Text("\(idea.emoji) \(idea.title)")
+                                            .font(.pals(14))
+                                            .foregroundStyle(isOn ? .white : Color.palsInk)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(isOn ? category.color : .white, in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
-                            .buttonStyle(.plain)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        } else {
+                            Text("Tap a bubble for ideas, or write your own below.")
+                                .font(.palsBody(13))
+                                .foregroundStyle(Color.palsInk.opacity(0.5))
                         }
                     }
                 }

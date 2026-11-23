@@ -26,20 +26,73 @@ struct CircleActivity: Identifiable, Hashable {
         return minutes == 1 ? "1 min" : "\(minutes) min"
     }
 
-    /// Ready-made ideas offered when creating a circle or adding an activity.
-    static let suggestions: [CircleActivity] = [
-        CircleActivity(emoji: "🚶", title: "Walk for 5 minutes", minutes: 5),
-        CircleActivity(emoji: "📚", title: "Read 10 pages", minutes: nil),
-        CircleActivity(emoji: "🧘", title: "Meditate 5 minutes", minutes: 5),
-        CircleActivity(emoji: "💪", title: "20 push-ups", minutes: nil),
-        CircleActivity(emoji: "💧", title: "Drink 8 glasses of water", minutes: nil),
-        CircleActivity(emoji: "📵", title: "No phone for 1 hour", minutes: 60),
-        CircleActivity(emoji: "🤸", title: "Stretch 10 minutes", minutes: 10),
-        CircleActivity(emoji: "🧎", title: "Plank for 1 minute", minutes: 1),
-    ]
+    /// Ready-made ideas offered when creating a circle or adding an activity, grouped by category.
+    static let suggestions: [CircleActivity] = ActivityCategory.allCases.flatMap(\.ideas)
 
     static func suggestion(_ title: String) -> CircleActivity {
         suggestions.first { $0.title == title } ?? CircleActivity(emoji: "✨", title: title, minutes: nil)
+    }
+}
+
+/// Groups of ready-made activity ideas.
+enum ActivityCategory: String, CaseIterable, Identifiable {
+    case move = "Move", mind = "Mind", body = "Body", detox = "Detox", social = "Social", chill = "Chill"
+
+    var id: String { rawValue }
+
+    var emoji: String {
+        switch self {
+        case .move: "🏃"
+        case .mind: "🧠"
+        case .body: "💧"
+        case .detox: "📵"
+        case .social: "💬"
+        case .chill: "🌿"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .move: Color(hex: 0xFF5A36)
+        case .mind: Color(hex: 0x7B5CFF)
+        case .body: Color(hex: 0x14B8A6)
+        case .detox: Color(hex: 0xFD3D9C)
+        case .social: Color(hex: 0x2F80ED)
+        case .chill: Color(hex: 0x22A06B)
+        }
+    }
+
+    var ideas: [CircleActivity] {
+        switch self {
+        case .move: [
+            CircleActivity(emoji: "🚶", title: "Walk for 5 minutes", minutes: 5),
+            CircleActivity(emoji: "💪", title: "20 push-ups", minutes: nil),
+            CircleActivity(emoji: "🤸", title: "Stretch 10 minutes", minutes: 10),
+            CircleActivity(emoji: "🧎", title: "Plank for 1 minute", minutes: 1),
+        ]
+        case .mind: [
+            CircleActivity(emoji: "📚", title: "Read 10 pages", minutes: nil),
+            CircleActivity(emoji: "🧘", title: "Meditate 5 minutes", minutes: 5),
+            CircleActivity(emoji: "✍️", title: "Write 3 lines in a journal", minutes: nil),
+        ]
+        case .body: [
+            CircleActivity(emoji: "💧", title: "Drink 8 glasses of water", minutes: nil),
+            CircleActivity(emoji: "🍎", title: "Eat a piece of fruit", minutes: nil),
+            CircleActivity(emoji: "😴", title: "In bed before midnight", minutes: nil),
+        ]
+        case .detox: [
+            CircleActivity(emoji: "📵", title: "No phone for 1 hour", minutes: 60),
+            CircleActivity(emoji: "🙅", title: "No social media today", minutes: nil),
+        ]
+        case .social: [
+            CircleActivity(emoji: "📞", title: "Call someone you miss", minutes: nil),
+            CircleActivity(emoji: "💌", title: "Compliment a stranger", minutes: nil),
+        ]
+        case .chill: [
+            CircleActivity(emoji: "🌳", title: "10 minutes outside", minutes: 10),
+            CircleActivity(emoji: "🧹", title: "Tidy up for 10 minutes", minutes: 10),
+        ]
+        }
     }
 }
 
