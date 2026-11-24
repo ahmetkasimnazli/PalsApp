@@ -10,6 +10,8 @@ struct MainTabView: View {
     @State private var model = HomeModel()
     @State private var photo = ProfilePhotoStore.load()
     @State private var tab: AppTab = .orbit
+    /// Today's card (or another way to start the activity) is on screen on the Orbit tab.
+    @State private var startOnScreen = false
     @State private var circlesPath: [PalsCircle.ID] = []
     @State private var playingPrank: IncomingPrank?
     @State private var shakes: CGFloat = 0
@@ -21,10 +23,10 @@ struct MainTabView: View {
         ZStack {
             TabView(selection: $tab) {
                 Tab("Orbit", systemImage: "circle.circle", value: AppTab.orbit) {
-                    HomeView(model: model, name: name, photo: photo) { id in
+                    HomeView(model: model, name: name, photo: photo, onViewCircle: { id in
                         circlesPath = [id]
                         tab = .circles
-                    }
+                    }, startOnScreen: $startOnScreen)
                 }
                 Tab("Circles", systemImage: "person.3", value: AppTab.circles) {
                     CirclesView(model: model, path: $circlesPath) { tab = .orbit }
@@ -41,8 +43,9 @@ struct MainTabView: View {
                                 onRestartOnboarding: onRestartOnboarding)
                 }
             }
-            // Today's activity is always one tap away, above the tab bar on every tab.
-            .tabViewBottomAccessory {
+            // Today's activity is one tap away above the tab bar, except while the Orbit page
+            // already shows something that does the same thing.
+            .tabViewBottomAccessory(isEnabled: !(tab == .orbit && startOnScreen)) {
                 ActivityAccessory(activity: model.selectedCircle.today, done: model.completedToday,
                                   revealed: model.isRevealed(model.selectedCircle)) {
                     // The draw plays on the Orbit tab.

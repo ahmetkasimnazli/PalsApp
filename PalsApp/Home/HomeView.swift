@@ -5,8 +5,13 @@ struct HomeView: View {
     let name: String
     let photo: UIImage?
     var onViewCircle: (PalsCircle.ID) -> Void = { _ in }
+    /// True while something on this page that starts today's activity is on screen,
+    /// so the floating activity bar can step aside.
+    @Binding var startOnScreen: Bool
 
     @State private var prankTarget: Friend?
+    @State private var cardOnScreen = false
+    @State private var snapOnScreen = false
     @State private var viewingProof: DualProof?
     /// Which top-bar stat has its details open.
     @State private var openStat: String?
@@ -15,8 +20,9 @@ struct HomeView: View {
         NavigationStack {
             content
                 .toolbar(.hidden, for: .navigationBar)
-                // Fixed stats row across the top, Duolingo-style: it stays put while the page scrolls.
-                .safeAreaInset(edge: .top, spacing: 0) { statsBar }
+                // Fixed stats row across the top, Duolingo-style. As a safe-area bar it gets the
+                // system's soft glass edge: content blurs and fades under it as the page scrolls.
+                .safeAreaBar(edge: .top, spacing: 0) { statsBar }
         }
     }
 
@@ -51,7 +57,18 @@ struct HomeView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 6)
-        .background(Color.palsIndigo)
+        // On top of the system glass edge, a brand tint that fades to clear so the stats
+        // stay readable over cards without a hard line.
+        .background {
+            LinearGradient(stops: [
+                .init(color: .palsIndigo.opacity(0.97), location: 0),
+                .init(color: .palsIndigo.opacity(0.85), location: 0.6),
+                .init(color: .palsIndigo.opacity(0), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+            .padding(.bottom, -24)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+        }
     }
 
     private func stat(_ emoji: String, value: Int, color: Color, lit: Bool, label: String) -> some View {
@@ -97,12 +114,14 @@ struct HomeView: View {
 
                 DailyCardView(model: model)
                     .padding(.top, 6)
+                    .onScrollVisibilityChange(threshold: 0.4) { cardOnScreen = $0 }
 
                 ProofStrip(model: model, circle: model.selectedCircle, onDark: true) {
                     model.startActivity()
                 }
                 .padding(.top, 18)
                 .padding(.bottom, 14)
+                .onScrollVisibilityChange(threshold: 0.4) { snapOnScreen = $0 }
 
                 TodayCard(
                     circle: model.selectedCircle,
@@ -116,7 +135,11 @@ struct HomeView: View {
             .padding(.horizontal, 20)
         }
         .scrollIndicators(.hidden)
+        .scrollEdgeEffectStyle(.soft, for: .top)
         .background(Color.palsIndigo.ignoresSafeArea())
+        .onChange(of: startVisible, initial: true) { _, visible in
+            withAnimation(Motion.appear) { startOnScreen = visible }
+        }
         .fullScreenCover(item: $viewingProof) { proof in
             ProofViewer(proofs: model.proofs(in: model.selectedCircle), startAt: proof.id)
         }
@@ -153,6 +176,13 @@ struct HomeView: View {
         } else {
             prankTarget = friend
         }
+    }
+
+    /// Today's card, or the moments strip while it shows its "Snap my moment" button.
+    private var startVisible: Bool {
+        let circle = model.selectedCircle
+        let stripHasButton = model.myProof(in: circle) == nil && !model.proofs(in: circle).isEmpty
+        return cardOnScreen || (snapOnScreen && stripHasButton)
     }
 
     // MARK: - Sections
@@ -194,7 +224,7 @@ struct HomeView: View {
 }
 
 #Preview {
-    HomeView(model: HomeModel(), name: "Ahmet", photo: nil)
+    HomeView(model: HomeModel(), name: "Ahmet", photo: nil, startOnScreen: .constant(false))
 }
 
 /// What the 🔥 in the top bar opens.
