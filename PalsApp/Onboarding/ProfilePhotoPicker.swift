@@ -52,7 +52,7 @@ struct ProfilePhotoPicker: View {
                     .glassEffect(.regular.tint(.white), in: .circle)
                     .offset(x: -size * 0.02, y: -size * 0.02)
             }
-            .animation(.snappy, value: initial)
+            .animation(Motion.select, value: initial)
         }
         .buttonStyle(PressableStyle())
         .accessibilityLabel(photo == nil ? "Add profile photo" : "Change profile photo")
@@ -68,7 +68,7 @@ struct ProfilePhotoPicker: View {
         guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data) else { return }
         let resized = await image.byPreparingThumbnail(ofSize: image.size.fitting(maxSide: 1024)) ?? image
-        withAnimation(.easeInOut) { photo = resized }
+        withAnimation(Motion.appear) { photo = resized }
     }
 }
 

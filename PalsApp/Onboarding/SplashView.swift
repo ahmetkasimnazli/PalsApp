@@ -5,6 +5,7 @@ import SwiftUI
 /// It only adds a small bounce before the app moves on.
 struct SplashView: View {
     @State private var bounce = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -19,10 +20,11 @@ struct SplashView: View {
         // Centered on the whole screen, like the storyboard, not inside the safe area.
         .ignoresSafeArea()
         .task {
+            guard !reduceMotion else { return }
             try? await Task.sleep(for: .milliseconds(150))
-            withAnimation(.spring(duration: 0.25, bounce: 0.5)) { bounce = true }
-            try? await Task.sleep(for: .milliseconds(220))
-            withAnimation(.spring(duration: 0.4, bounce: 0.5)) { bounce = false }
+            withAnimation(.easeOut(duration: 0.18)) { bounce = true }
+            try? await Task.sleep(for: .milliseconds(180))
+            withAnimation(.spring(duration: 0.35, bounce: 0.25)) { bounce = false }
         }
     }
 }

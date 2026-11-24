@@ -3,6 +3,26 @@ import SwiftUI
 // Card-based pieces of the app, all in the same language as today's card:
 // every activity is a coloured card with its own bold shapes.
 
+// MARK: - Card surface
+
+/// The background of every card: its solid colour, with the card's shapes on top.
+struct CardSurface: View {
+    let color: Color
+    var pattern: Int? = nil
+    var cornerRadius: CGFloat = 24
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        ZStack {
+            shape.fill(color)
+            if let pattern {
+                CardArt(pattern: pattern)
+                    .clipShape(shape)
+            }
+        }
+    }
+}
+
 // MARK: - Mini activity card
 
 /// A compact version of an activity's card, for decks and lists.
@@ -14,10 +34,7 @@ struct ActivityMiniCard: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(activity.cardColor)
-            CardArt(pattern: activity.cardPattern)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            CardSurface(color: activity.cardColor, pattern: activity.cardPattern, cornerRadius: 24)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top) {
@@ -76,6 +93,9 @@ struct PoolDeck: View {
 
     var body: some View {
         let cards = ordered
+        Button {
+            withAnimation(Motion.expand) { open.toggle() }
+        } label: {
         ZStack(alignment: .top) {
             ForEach(Array(cards.enumerated()), id: \.element.id) { index, activity in
                 // Back cards first (higher in the stack), today's card in front at the bottom.
@@ -91,9 +111,8 @@ struct PoolDeck: View {
         }
         .frame(height: cardHeight + CGFloat(max(0, cards.count - 1)) * step, alignment: .top)
         .contentShape(Rectangle())
-        .onTapGesture {
-            withAnimation(.spring(duration: 0.5, bounce: 0.25)) { open.toggle() }
         }
+        .buttonStyle(PressableStyle())
         .sensoryFeedback(.selection, trigger: open)
         .accessibilityElement(children: .contain)
         .accessibilityHint(open ? "Double tap to stack the cards" : "Double tap to fan out the cards")
@@ -119,7 +138,7 @@ struct PassionPicker: View {
     private func pill(_ idea: CircleActivity) -> some View {
         let isOn = picked.contains(idea.title)
         return Button {
-            withAnimation(.spring(duration: 0.3, bounce: 0.4)) {
+            withAnimation(Motion.select) {
                 if isOn { picked.remove(idea.title) } else { picked.insert(idea.title) }
             }
         } label: {
@@ -135,7 +154,7 @@ struct PassionPicker: View {
                                 .symbolRenderingMode(.palette)
                                 .foregroundStyle(idea.cardColor, .white)
                                 .offset(x: 4, y: -4)
-                                .transition(.scale.combined(with: .opacity))
+                                .transition(.scale(scale: 0.9).combined(with: .opacity))
                         }
                     }
                 Text(idea.title)
@@ -153,7 +172,7 @@ struct PassionPicker: View {
             .overlay(Capsule().strokeBorder(Color.palsInk.opacity(isOn ? 0 : 0.08), lineWidth: 1))
             .scaleEffect(isOn ? 1 : 0.97)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
@@ -191,7 +210,7 @@ struct CategoryBlob: View {
                 ForEach(ActivityCategory.allCases) { category in
                     let spot = Self.layout[category]!
                     Button {
-                        withAnimation(.spring(duration: 0.4, bounce: 0.35)) {
+                        withAnimation(Motion.expand) {
                             selected = selected == category ? nil : category
                         }
                     } label: {
@@ -205,7 +224,7 @@ struct CategoryBlob: View {
                         .frame(width: spot.d * scale * 0.8, height: spot.d * scale * 0.8)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableStyle())
                     .position(x: spot.x * scale, y: spot.y * scale)
                     .accessibilityLabel(category.rawValue)
                     .accessibilityAddTraits(selected == category ? .isSelected : [])
@@ -233,12 +252,12 @@ struct PrankFan: View {
             ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
                 let spread = Double(index) - Double(kinds.count - 1) / 2
                 let isPicked = kind == selected
-                card(kind)
+                Button { pick(kind) } label: { card(kind) }
+                    .buttonStyle(PressableStyle())
                     .scaleEffect(isPicked ? 1 : 0.86)
                     .rotationEffect(.degrees(isPicked ? spread * 3 : spread * 10), anchor: .bottom)
                     .offset(x: spread * 52, y: isPicked ? -18 : abs(spread) * 10)
                     .zIndex(isPicked ? 100 : Double(index))
-                    .onTapGesture { pick(kind) }
             }
         }
         .frame(height: 260)
@@ -253,15 +272,12 @@ struct PrankFan: View {
     }
 
     private func pick(_ kind: PrankKind) {
-        withAnimation(.spring(duration: 0.4, bounce: 0.3)) { selected = kind }
+        withAnimation(Motion.select) { selected = kind }
     }
 
     private func card(_ kind: PrankKind) -> some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(kind.cardColor)
-            CardArt(pattern: kind.cardPattern)
-                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            CardSurface(color: kind.cardColor, pattern: kind.cardPattern, cornerRadius: 26)
             VStack(alignment: .leading, spacing: 6) {
                 PalsAvatar(name: target.name, color: target.color, size: 40, glass: false)
                 Spacer()
@@ -366,14 +382,16 @@ struct ProgressDeckView: View {
         let full: CGFloat = 150
         return VStack(spacing: 0) {
             ForEach(items) { day in
-                dayCard(day, height: full)
-                    .frame(height: openDay == day.id ? full + 12 : peek, alignment: .top)
-                    .zIndex(Double(day.id))
-                    .onTapGesture {
-                        withAnimation(.spring(duration: 0.45, bounce: 0.25)) {
-                            openDay = openDay == day.id ? nil : day.id
-                        }
+                Button {
+                    withAnimation(Motion.expand) {
+                        openDay = openDay == day.id ? nil : day.id
                     }
+                } label: {
+                    dayCard(day, height: full)
+                }
+                .buttonStyle(PressableStyle())
+                .frame(height: openDay == day.id ? full + 12 : peek, alignment: .top)
+                .zIndex(Double(day.id))
             }
             Color.clear.frame(height: full - peek)
         }
@@ -383,12 +401,8 @@ struct ProgressDeckView: View {
     private func dayCard(_ day: Day, height: CGFloat) -> some View {
         let color: Color = day.hidden ? .palsPink : (day.done ? day.activity.cardColor : Color(white: 0.72))
         return ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(color)
-            if day.done && !day.hidden {
-                CardArt(pattern: day.activity.cardPattern)
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            }
+            CardSurface(color: color, pattern: day.done && !day.hidden ? day.activity.cardPattern : nil,
+                        cornerRadius: 24)
             VStack(alignment: .leading, spacing: 10) {
                 // The strip that shows while the card is in the deck.
                 HStack(spacing: 10) {

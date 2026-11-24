@@ -61,7 +61,7 @@ struct PrankOverlayView: View {
 
             if stage != .incoming {
                 impactWord
-                    .transition(.scale(scale: 0.2).combined(with: .opacity))
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
         }
     }
@@ -76,16 +76,16 @@ struct PrankOverlayView: View {
         }
         PrankHaptics.shared.play(prank.kind, impactAt: landsAfter)
         try? await Task.sleep(for: .seconds(landsAfter))
-        withAnimation(.spring(duration: 0.35, bounce: 0.5)) { stage = .impact }
+        withAnimation(Motion.pop) { stage = .impact }
         onImpact()
         if !reduceMotion {
             impactStart = .now
-            withAnimation(.linear(duration: 0.45)) { shakes += 1 }
+            withAnimation(Motion.shake) { shakes += 1 }
         }
         try? await Task.sleep(for: .milliseconds(750))
         withAnimation(.easeOut(duration: 0.4)) { stage = .aftermath }
         try? await Task.sleep(for: .milliseconds(250))
-        withAnimation(.spring(duration: 0.5, bounce: 0.3)) { showCard = true }
+        withAnimation(Motion.sheet) { showCard = true }
         try? await Task.sleep(for: .milliseconds(400))
         impactStart = nil
     }
@@ -172,7 +172,7 @@ struct PrankOverlayView: View {
             .frame(maxWidth: .infinity, minHeight: 56)
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
     }
 }
@@ -220,7 +220,7 @@ private struct EmojiPrankAnimation: View {
         }
         .onChange(of: stage) { _, newValue in
             if kind == .iceBucket, newValue == .aftermath {
-                withAnimation(.easeIn(duration: 0.45).delay(0.4)) { bucketGone = true }
+                withAnimation(.easeOut(duration: 0.3).delay(0.4)) { bucketGone = true }
             }
             guard kind == .italian, newValue == .impact, !reduceMotion else { return }
             // Pump the wrist in time with the haptic taps (0.36 s per pump).

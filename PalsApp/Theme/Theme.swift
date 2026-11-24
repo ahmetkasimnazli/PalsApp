@@ -65,3 +65,38 @@ extension Font {
         pals(size, weight: .black, relativeTo: .largeTitle)
     }
 }
+
+/// The app's motion vocabulary. Pick an animation by what it's for, not by its numbers, so the
+/// same kind of interaction always moves the same way. UI motion stays quick (≈0.1–0.4 s),
+/// eases out, and barely bounces; only rare, playful moments (pranks, finishing an activity) bounce.
+enum Motion {
+    // Touch feedback: instant on press, a touch slower on release.
+    static let pressDown = Animation.easeOut(duration: 0.1)
+    static let pressUp = Animation.easeOut(duration: 0.16)
+
+    // Things appearing and leaving. Leaving is never slower than arriving.
+    static let appear = Animation.easeOut(duration: 0.2)
+    static let disappear = Animation.easeOut(duration: 0.2)
+
+    /// Picking one thing out of several: a chip, a card in a fan, a circle.
+    static let select = Animation.spring(duration: 0.25, bounce: 0.15)
+    /// Opening or closing in place: a deck fanning out, a bubble growing, a row expanding.
+    static let expand = Animation.spring(duration: 0.35, bounce: 0.15)
+    /// Values changing on screen: progress, counts, a list updating. No bounce.
+    static let update = Animation.spring(duration: 0.4, bounce: 0)
+    /// Moving between whole screens or onboarding steps.
+    static let screen = Animation.easeInOut(duration: 0.35)
+    /// A card or panel sliding up into view.
+    static let sheet = Animation.spring(duration: 0.45, bounce: 0.15)
+
+    // Today's card draw.
+    static let shuffle = Animation.spring(duration: 0.22, bounce: 0.2)
+    static let flip = Animation.spring(duration: 0.7, bounce: 0.2)
+
+    // Rare, playful moments: allowed to bounce.
+    static let pop = Animation.spring(duration: 0.35, bounce: 0.5)
+    static let celebrate = Animation.spring(duration: 0.5, bounce: 0.3)
+    static let shake = Animation.linear(duration: 0.45)
+    static let punchIn = Animation.spring(duration: 0.12)
+    static let punchOut = Animation.spring(duration: 0.4, bounce: 0.3)
+}

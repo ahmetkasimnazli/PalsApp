@@ -20,9 +20,9 @@ struct PrankSheet: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Color.palsInk)
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel("Close")
             }
@@ -79,7 +79,7 @@ struct PrankSheet: View {
                 .frame(maxWidth: .infinity, minHeight: 60)
                 .contentShape(Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
             .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
             .padding(.top, 8)
 
@@ -91,14 +91,14 @@ struct PrankSheet: View {
                     .foregroundStyle(Color.palsInk)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
         }
     }
 
     private func option(_ kind: PrankKind) -> some View {
         let isSelected = kind == selected
         return Button {
-            withAnimation(.spring(duration: 0.3)) { selected = kind }
+            withAnimation(Motion.select) { selected = kind }
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(kind.emoji)
@@ -126,7 +126,7 @@ struct PrankSheet: View {
             )
             .scaleEffect(isSelected ? 1 : 0.97)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

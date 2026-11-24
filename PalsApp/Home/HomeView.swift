@@ -69,7 +69,7 @@ struct HomeView: View {
             PrankSheet(
                 friend: model.friend(id: friend.id) ?? friend,
                 onSend: { kind in
-                    withAnimation(.spring) { model.sendPrank(kind, to: friend.id) }
+                    withAnimation(Motion.update) { model.sendPrank(kind, to: friend.id) }
                     Task {
                         // Let the sheet slide away, then play it on your screen too.
                         try? await Task.sleep(for: .milliseconds(450))
@@ -104,7 +104,7 @@ struct HomeView: View {
                 .accessibilityAddTraits(.isHeader)
 
             Menu {
-                Picker("Circle", selection: $model.selectedCircleID.animation(.snappy)) {
+                Picker("Circle", selection: $model.selectedCircleID.animation(Motion.select)) {
                     ForEach(model.circles) { circle in
                         Text("\(circle.emoji) \(circle.name)").tag(circle.id)
                     }

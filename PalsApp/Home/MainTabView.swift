@@ -65,12 +65,12 @@ struct MainTabView: View {
                 PrankOverlayView(
                     prank: prank,
                     onImpact: {
-                        withAnimation(.linear(duration: 0.45)) { shakes += 1 }
+                        withAnimation(Motion.shake) { shakes += 1 }
                         guard !reduceMotion else { return }
-                        withAnimation(.spring(duration: 0.12)) { punched = true }
+                        withAnimation(Motion.punchIn) { punched = true }
                         Task {
                             try? await Task.sleep(for: .milliseconds(120))
-                            withAnimation(.spring(duration: 0.45, bounce: 0.5)) { punched = false }
+                            withAnimation(Motion.punchOut) { punched = false }
                         }
                     },
                     onStartActivity: {
@@ -104,12 +104,12 @@ struct MainTabView: View {
 
     private func playPendingPrank() {
         guard playingPrank == nil, let prank = model.incomingPrank else { return }
-        withAnimation(.easeIn(duration: 0.2)) { playingPrank = prank }
+        withAnimation(Motion.appear) { playingPrank = prank }
     }
 
     private func finishPrank() {
         model.incomingPrank = nil
-        withAnimation(.easeOut(duration: 0.3)) { playingPrank = nil }
+        withAnimation(Motion.disappear) { playingPrank = nil }
     }
 }
 
@@ -166,7 +166,7 @@ private struct ActivityAccessory: View {
             .background(.white.opacity(0.30), in: Capsule())
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .accessibilityLabel(done ? "Done for today: \(activity.title)" : "Start today's activity: \(activity.title)")
     }
 }

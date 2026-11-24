@@ -36,7 +36,7 @@ struct TodayCard: View {
         }
         .padding(18)
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
-        .animation(.spring(duration: 0.4), value: circle)
+        .animation(Motion.update, value: circle)
     }
 
     private var header: some View {
@@ -78,7 +78,7 @@ struct TodayCard: View {
                     .frame(minHeight: 32)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .accessibilityLabel("View all of \(circle.name)")
             }
         }
@@ -125,7 +125,7 @@ struct TodayCard: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(.white.opacity(0.15), in: Capsule())
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(.scale(scale: 0.9).combined(with: .opacity))
             } else {
                 Button { onPrank(friend) } label: {
                     Text("Prank 😈")
@@ -135,7 +135,7 @@ struct TodayCard: View {
                         .padding(.vertical, 10)
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .glassEffect(.regular.tint(.palsPink).interactive(), in: .capsule)
                 .accessibilityLabel("Prank \(friend.name)")
             }

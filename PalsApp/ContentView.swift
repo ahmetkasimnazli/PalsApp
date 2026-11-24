@@ -57,7 +57,7 @@ struct ContentView: View    {
     }
 
     private func go(to next: Step) {
-        withAnimation(.easeInOut(duration: 0.35)) { step = next }
+        withAnimation(Motion.screen) { step = next }
     }
 
     private func finishOnboarding() {

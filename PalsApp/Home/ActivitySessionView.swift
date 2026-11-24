@@ -71,7 +71,7 @@ struct ActivitySessionView: View {
                 Group {
                     if isFinished, let proof {
                         ProofPolaroid(image: proof)
-                            .transition(.scale(scale: 0.6).combined(with: .opacity))
+                            .transition(.scale(scale: 0.9).combined(with: .opacity))
                     } else if hasTimer {
                         timer
                     } else {
@@ -95,7 +95,7 @@ struct ActivitySessionView: View {
                     .foregroundStyle(Color.palsInk)
                     .frame(width: 44, height: 44)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
             .glassEffect(.regular.interactive(), in: .circle)
             .padding(.leading, 20)
             .padding(.top, 16)
@@ -114,7 +114,7 @@ struct ActivitySessionView: View {
         .fullScreenCover(isPresented: $showingCamera) {
             CameraPicker { image in
                 let small = image.preparingThumbnail(of: image.size.fitting(maxSide: 1200)) ?? image
-                withAnimation(.spring(duration: 0.5, bounce: 0.35)) { proof = small }
+                withAnimation(Motion.celebrate) { proof = small }
             }
             .ignoresSafeArea()
         }
@@ -211,7 +211,7 @@ struct ActivitySessionView: View {
             .frame(maxWidth: .infinity, minHeight: 60)
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
     }
 
@@ -228,7 +228,7 @@ struct ActivitySessionView: View {
 
     private func finish() {
         isRunning = false
-        withAnimation(.spring(duration: 0.5)) { isFinished = true }
+        withAnimation(Motion.celebrate) { isFinished = true }
         onComplete()
     }
 }

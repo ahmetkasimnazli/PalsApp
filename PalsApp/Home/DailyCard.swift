@@ -31,6 +31,9 @@ struct DailyCardView: View {
                         .brightness(revealed ? -0.12 : 0)
                 }
 
+                Button {
+                    if revealed { model.startActivity() } else { draw() }
+                } label: {
                 FlipCard(
                     angle: angle,
                     front: CardFace(activity: circle.today, circle: circle,
@@ -41,12 +44,11 @@ struct DailyCardView: View {
                     back: CardBack(showsPrompt: !drawing)
                 )
                 .frame(height: Self.height)
+                .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                }
+                .buttonStyle(PressableStyle())
                 .scaleEffect(lifted ? 1.04 : 1)
                 .offset(y: lifted ? -8 : 0)
-                .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .onTapGesture {
-                    if revealed { model.startActivity() } else { draw() }
-                }
             }
             .padding(.bottom, 14)
 
@@ -81,20 +83,20 @@ struct DailyCardView: View {
             if !reduceMotion {
                 // Shuffle: the deck fans out and snaps back together, twice.
                 for _ in 0..<2 {
-                    withAnimation(.spring(duration: 0.22, bounce: 0.3)) { fanned = true }
+                    withAnimation(Motion.shuffle) { fanned = true }
                     shuffleTicks += 1
                     try? await Task.sleep(for: .milliseconds(230))
-                    withAnimation(.spring(duration: 0.22, bounce: 0.3)) { fanned = false }
+                    withAnimation(Motion.shuffle) { fanned = false }
                     shuffleTicks += 1
                     try? await Task.sleep(for: .milliseconds(230))
                 }
-                withAnimation(.spring(duration: 0.25)) { lifted = true }
+                withAnimation(Motion.select) { lifted = true }
                 try? await Task.sleep(for: .milliseconds(180))
-                withAnimation(.spring(duration: 0.7, bounce: 0.25)) { angle = 180 }
+                withAnimation(Motion.flip) { angle = 180 }
                 try? await Task.sleep(for: .milliseconds(450))
-                withAnimation(.spring(duration: 0.4, bounce: 0.4)) { lifted = false }
+                withAnimation(Motion.expand) { lifted = false }
             } else {
-                withAnimation(.easeInOut(duration: 0.3)) { angle = 180 }
+                angle = 180
             }
             revealTicks += 1
             model.reveal(drawnCircle)
@@ -118,12 +120,27 @@ private struct FlipCard<Front: View, Back: View>: View, Animatable {
 
     var body: some View {
         ZStack {
-            back.opacity(angle < 90 ? 1 : 0)
+            back
+                .modifier(Turn(degrees: angle))
+                .opacity(angle < 90 ? 1 : 0)
             front
-                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                .modifier(Turn(degrees: angle - 180))
                 .opacity(angle >= 90 ? 1 : 0)
         }
-        .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
+    }
+}
+
+/// A 3D turn around the vertical axis, applied only while the card is actually turned:
+/// Liquid Glass renders badly inside a 3D transform, even an identity one.
+private struct Turn: ViewModifier {
+    let degrees: Double
+
+    func body(content: Content) -> some View {
+        if degrees == 0 {
+            content
+        } else {
+            content.rotation3DEffect(.degrees(degrees), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
+        }
     }
 }
 
@@ -135,8 +152,7 @@ private struct CardBack: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.palsPink)
+            CardSurface(color: .palsPink, cornerRadius: 28)
             Canvas { context, size in
                 let step: CGFloat = 16
                 for x in stride(from: step / 2, to: size.width, by: step) {
@@ -182,10 +198,7 @@ private struct CardFace: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(activity.cardColor)
-            CardArt(pattern: activity.cardPattern)
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            CardSurface(color: activity.cardColor, pattern: activity.cardPattern, cornerRadius: 28)
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack {

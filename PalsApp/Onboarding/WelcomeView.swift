@@ -78,7 +78,7 @@ struct WelcomeView: View {
                     .frame(maxWidth: .infinity, minHeight: 64)
                     .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .glassEffect(.regular.tint(.white).interactive(), in: .capsule)
 
                 Label("No sign-up. Pals uses your iCloud account.", systemImage: "icloud.fill")
@@ -94,11 +94,13 @@ struct WelcomeView: View {
     }
 }
 
+/// The app's press feedback for custom buttons: a subtle scale-down the moment a finger lands,
+/// released quickly. Responding on touch-down is what makes a tap feel heard.
 struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+            .animation(configuration.isPressed ? Motion.pressDown : Motion.pressUp, value: configuration.isPressed)
     }
 }
 

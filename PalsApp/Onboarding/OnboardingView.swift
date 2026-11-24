@@ -44,7 +44,7 @@ struct OnboardingView: View {
                         .frame(width: 20, height: 7)
                 }
             }
-            .animation(.easeInOut, value: selection)
+            .animation(Motion.update, value: selection)
             .accessibilityElement()
             .accessibilityLabel("Page \(selection + 1) of \(pages.count)")
 
@@ -58,7 +58,7 @@ struct OnboardingView: View {
                         .padding(.vertical, 10)
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .glassEffect(.regular.interactive(), in: .capsule)
             }
         }
@@ -109,7 +109,7 @@ private struct OnboardingPageView: View {
                     .frame(width: 68, height: 68)
                     .contentShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
             .glassEffect(.regular.tint(.white).interactive(), in: .circle)
             .accessibilityLabel("Next")
             .padding(.top, 32)

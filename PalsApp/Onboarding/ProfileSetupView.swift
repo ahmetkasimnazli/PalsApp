@@ -64,7 +64,7 @@ struct ProfileSetupView: View {
                     .frame(maxWidth: .infinity, minHeight: 64)
                     .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .glassEffect(.regular.tint(.white).interactive(canContinue), in: .capsule)
                 .opacity(canContinue ? 1 : 0.5)
                 .disabled(!canContinue)
@@ -78,8 +78,8 @@ struct ProfileSetupView: View {
                     .padding(.bottom, 4)
             }
             .padding(.horizontal, 20)
-            .animation(.snappy, value: nameFocused)
-            .animation(.easeInOut, value: canContinue)
+            .animation(Motion.expand, value: nameFocused)
+            .animation(Motion.update, value: canContinue)
         }
     }
 

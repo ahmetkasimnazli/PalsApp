@@ -69,8 +69,8 @@ struct OrbitView: View {
                 })
             }
         }
-        .animation(.spring(duration: 0.5), value: friends)
-        .animation(.easeInOut(duration: 0.8), value: progress)
+        .animation(Motion.update, value: friends)
+        .animation(Motion.update, value: progress)
     }
 
     private var youView: some View {
@@ -110,7 +110,7 @@ struct OrbitView: View {
             .frame(width: 30, height: 30)
             .background(Color.palsOffWhite, in: Circle())
             .offset(x: -4, y: -4)
-            .transition(.scale.combined(with: .opacity))
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
     }
 
     private func friendLabel(_ friend: Friend) -> String {

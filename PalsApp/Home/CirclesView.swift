@@ -47,7 +47,7 @@ struct CirclesView: View {
                         .frame(maxWidth: .infinity, minHeight: 58)
                         .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableStyle())
                     .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
                     .padding(.top, 22)
                     .padding(.bottom, 24)
@@ -59,6 +59,7 @@ struct CirclesView: View {
             .navigationDestination(for: PalsCircle.ID.self) { id in
                 CircleDetailView(model: model, circleID: id, onOpenOrbit: onOpenOrbit)
             }
+            .navigationTitle("Circles")
             .toolbar(.hidden, for: .navigationBar)
         }
         .sheet(isPresented: $showingNewCircle) {
@@ -164,7 +165,7 @@ private struct ProgressBar: View {
             }
         }
         .frame(height: 10)
-        .animation(.spring(duration: 0.5), value: value)
+        .animation(Motion.update, value: value)
     }
 }
 
@@ -175,7 +176,6 @@ private struct CircleDetailView: View {
     let circleID: PalsCircle.ID
     var onOpenOrbit: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @State private var prankTarget: Friend?
     @State private var addingActivity = false
 
@@ -185,23 +185,10 @@ private struct CircleDetailView: View {
         if let circle {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(Color.palsInk)
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Back")
-
                     HStack(alignment: .center, spacing: 10) {
                         Text(circle.emoji).font(.system(size: 44))
                         HighlightHeadline(lines: [], highlight: "\(circle.name).", size: 40)
                     }
-                    .padding(.top, 14)
 
                     activityCard(circle)
                         .padding(.top, 18)
@@ -235,7 +222,7 @@ private struct CircleDetailView: View {
                                 .frame(maxWidth: .infinity, minHeight: 54)
                                 .contentShape(Capsule())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressableStyle())
                         .glassEffect(.regular.interactive(), in: .capsule)
                         .padding(.top, 22)
                     }
@@ -245,7 +232,9 @@ private struct CircleDetailView: View {
             }
             .scrollIndicators(.hidden)
             .background(Color.palsOffWhite.ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
+            // The system bar gives a standard back button and the edge swipe to go back.
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .sheet(isPresented: $addingActivity) {
                 AddActivitySheet { activity in
                     withAnimation { model.addActivity(activity, to: circleID) }
@@ -255,7 +244,7 @@ private struct CircleDetailView: View {
                 PrankSheet(
                     friend: model.friend(id: friend.id) ?? friend,
                     onSend: { kind in
-                        withAnimation(.spring) { model.sendPrank(kind, to: friend.id) }
+                        withAnimation(Motion.update) { model.sendPrank(kind, to: friend.id) }
                         Task {
                             try? await Task.sleep(for: .milliseconds(450))
                             model.playSentPrank(kind, to: friend)
@@ -330,7 +319,7 @@ private struct CircleDetailView: View {
                     .frame(maxWidth: .infinity, minHeight: 52)
                     .contentShape(Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
             .glassEffect(.regular.interactive(), in: .capsule)
             .padding(.top, 4)
         }
@@ -403,7 +392,7 @@ private struct CircleDetailView: View {
                         .padding(.vertical, 9)
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .glassEffect(.regular.tint(.palsPink).interactive(), in: .capsule)
                 .accessibilityLabel("Prank \(friend.name)")
             }
@@ -452,9 +441,9 @@ private struct NewCircleSheet: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(Color.palsInk)
-                            .frame(width: 40, height: 40)
+                            .frame(width: 44, height: 44)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableStyle())
                     .glassEffect(.regular.interactive(), in: .circle)
                     .accessibilityLabel("Close")
                 }
@@ -477,7 +466,7 @@ private struct NewCircleSheet: View {
                                     .background(.white, in: Circle())
                                     .overlay(Circle().strokeBorder(Color.palsBlue, lineWidth: e == emoji ? 2.5 : 0))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressableStyle())
                             .accessibilityAddTraits(e == emoji ? .isSelected : [])
                         }
                     }
@@ -512,7 +501,7 @@ private struct NewCircleSheet: View {
                                 .padding(.vertical, 8)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressableStyle())
                             .accessibilityAddTraits(members.contains(pal.id) ? .isSelected : [])
                         }
                     }
@@ -530,7 +519,7 @@ private struct NewCircleSheet: View {
                         .frame(maxWidth: .infinity, minHeight: 58)
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .glassEffect(.regular.tint(.palsBlue.opacity(canCreate ? 1 : 0.4)).interactive(canCreate), in: .capsule)
                 .disabled(!canCreate)
             }
@@ -569,7 +558,7 @@ private struct FlowChips: View {
                         .padding(.vertical, 9)
                         .background(isOn ? Color.palsBlue : .white, in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .accessibilityAddTraits(isOn ? .isSelected : [])
             }
         }

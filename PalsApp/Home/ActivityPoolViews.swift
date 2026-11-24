@@ -45,7 +45,7 @@ struct AddActivitySheet: View {
                                             .padding(.vertical, 8)
                                             .background(isOn ? category.color : .white, in: Capsule())
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(PressableStyle())
                                 }
                             }
                             .transition(.move(edge: .top).combined(with: .opacity))
@@ -76,7 +76,7 @@ struct AddActivitySheet: View {
                                         .background(.white, in: Circle())
                                         .overlay(Circle().strokeBorder(Color.palsBlue, lineWidth: e == emoji ? 2.5 : 0))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(PressableStyle())
                                 .accessibilityAddTraits(e == emoji ? .isSelected : [])
                             }
                         }
@@ -97,7 +97,7 @@ struct AddActivitySheet: View {
                                     .padding(.vertical, 9)
                                     .background(selected ? Color.palsBlue : .white, in: Capsule())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressableStyle())
                             .accessibilityAddTraits(selected ? .isSelected : [])
                         }
                     }
@@ -117,7 +117,7 @@ struct AddActivitySheet: View {
                         .frame(maxWidth: .infinity, minHeight: 58)
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .glassEffect(.regular.tint(.palsBlue.opacity(trimmed.isEmpty ? 0.4 : 1)).interactive(!trimmed.isEmpty), in: .capsule)
                 .disabled(trimmed.isEmpty)
             }
@@ -234,9 +234,9 @@ struct CloseButton: View {
             Image(systemName: "xmark")
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Color.palsInk)
-                .frame(width: 40, height: 40)
+                .frame(width: 44, height: 44)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Close")
     }
