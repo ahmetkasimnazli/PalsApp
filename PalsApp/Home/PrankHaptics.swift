@@ -15,7 +15,8 @@ final class PrankHaptics {
 
     /// Plays the pattern for `kind`, with the hit landing `impactAt` seconds from now.
     func play(_ kind: PrankKind, impactAt: TimeInterval) {
-        guard let engine else { return }
+        // Profile → Settings → Prank haptics.
+        guard let engine, UserDefaults.standard.object(forKey: "prankHaptics") as? Bool ?? true else { return }
         do {
             try engine.start()
             let player = try engine.makePlayer(with: pattern(for: kind, impactAt: impactAt))

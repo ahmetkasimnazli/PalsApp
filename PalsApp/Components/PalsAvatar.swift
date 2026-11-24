@@ -43,7 +43,9 @@ struct PalsAvatar: View {
     private var ring: CGFloat { max(3, size * 0.06) }
 
     /// Profile photo bundled as "Avatar<FirstName>" (e.g. AvatarAlessia), if there is one.
-    private var memoji: UIImage? {
+    private var memoji: UIImage? { Self.bundledPhoto(for: name) }
+
+    static func bundledPhoto(for name: String) -> UIImage? {
         guard let first = name.split(separator: " ").first else { return nil }
         return UIImage(named: "Avatar\(first.prefix(1).uppercased())\(first.dropFirst().lowercased())")
     }

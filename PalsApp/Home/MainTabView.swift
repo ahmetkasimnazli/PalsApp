@@ -33,9 +33,12 @@ struct MainTabView: View {
                     ProgressDeckView(model: model)
                 }
                 Tab("Profile", systemImage: "person", value: AppTab.profile) {
-                    ProfileTabView(name: name, photo: photo,
-                                   onResetToday: { withAnimation { model.resetToday() } },
-                                   onRestartOnboarding: onRestartOnboarding)
+                    ProfileView(model: model, photo: $photo,
+                                onOpenCircle: { id in
+                                    circlesPath = [id]
+                                    tab = .circles
+                                },
+                                onRestartOnboarding: onRestartOnboarding)
                 }
             }
             // Today's activity is always one tap away, above the tab bar on every tab.
@@ -184,49 +187,6 @@ private struct ComingSoonView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Color.palsOffWhite.ignoresSafeArea())
-    }
-}
-
-private struct ProfileTabView: View {
-    let name: String
-    let photo: UIImage?
-    var onResetToday: () -> Void
-    var onRestartOnboarding: () -> Void
-
-    @State private var didReset = false
-
-    var body: some View {
-        VStack(spacing: 16) {
-            PalsAvatar(name: name.isEmpty ? "You" : name, photo: photo, size: 120)
-            Text(name.isEmpty ? "Pal" : name)
-                .font(.palsDisplay(34))
-                .foregroundStyle(Color.palsInk)
-            Button(didReset ? "Today reset ✓" : "Reset today (demo)") {
-                onResetToday()
-                didReset = true
-            }
-            .font(.pals(17))
-            .foregroundStyle(Color.palsBlue)
-            .buttonStyle(.glass)
-            .controlSize(.large)
-            .padding(.top, 24)
-
-            Button("Restart onboarding", action: onRestartOnboarding)
-                .font(.pals(17))
-                .foregroundStyle(Color.palsBlue)
-                .buttonStyle(.glass)
-                .controlSize(.large)
-
-            Text("Demo: tap the bell on the Orbit tab to get pranked by a pal.")
-                .font(.palsBody(14))
-                .foregroundStyle(Color.palsInk.opacity(0.5))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .padding(.top, 8)
-        }
-        .onDisappear { didReset = false }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.palsOffWhite.ignoresSafeArea())
     }
 }

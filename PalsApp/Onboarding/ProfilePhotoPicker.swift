@@ -24,6 +24,12 @@ struct ProfilePhotoPicker: View {
                         .resizable()
                         .scaledToFill()
                         .transition(.opacity)
+                } else if let bundled = PalsAvatar.bundledPhoto(for: name) {
+                    // Same fallback the avatar uses everywhere else, so this matches what pals see.
+                    Image(uiImage: bundled)
+                        .resizable()
+                        .scaledToFill()
+                        .transition(.opacity)
                 } else {
                     Color.palsPink
                     if isLoading {
