@@ -22,7 +22,7 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HighlightHeadline(lines: ["Your"], highlight: "profile.", size: 52)
+                HighlightHeadline(lines: ["Your"], highlight: "profile", size: 52)
                     .padding(.top, 12)
 
                 PlayerCard(name: displayName, photo: photo, streak: model.streakDays,
@@ -82,6 +82,7 @@ struct ProfileView: View {
                 name = newName
                 photo = newPhoto
                 ProfilePhotoStore.save(newPhoto)
+                model.profileChanged()
             }
             .presentationDetents([.medium, .large])
         }

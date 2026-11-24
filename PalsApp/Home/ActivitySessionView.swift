@@ -28,6 +28,7 @@ struct ActivitySessionView: View {
     private var proof: DualProof? { circle.flatMap(model.myProof(in:)) }
     private var palsProofs: [DualProof] { circle.map(model.proofs(in:))?.filter { !$0.isYours } ?? [] }
     private var streak: Int { model.streakDays }
+    private var triesLeft: Int { circle.map(model.momentTriesLeft(in:)) ?? 0 }
 
     private var duration: Int { (activity.minutes ?? 0) * 60 }
     private var hasTimer: Bool { activity.minutes != nil }
@@ -40,12 +41,12 @@ struct ActivitySessionView: View {
         "Your streak is now \(streak == 1 ? "1 day" : "\(streak) days") 🔥"
     }
 
-    /// "Walk for 5 minutes" → ["Walk for"] + "5 minutes."
+    /// "Walk for 5 minutes" → ["Walk for"] + "5 minutes"
     private var headline: (lines: [String], highlight: String) {
         let words = activity.title.split(separator: " ").map(String.init)
-        guard words.count > 2 else { return ([], activity.title + ".") }
+        guard words.count > 2 else { return ([], activity.title) }
         let split = words.count / 2
-        return ([words[..<split].joined(separator: " ")], words[split...].joined(separator: " ") + ".")
+        return ([words[..<split].joined(separator: " ")], words[split...].joined(separator: " "))
     }
 
     var body: some View {
@@ -122,7 +123,10 @@ struct ActivitySessionView: View {
         }
         .sensoryFeedback(.success, trigger: isFinished)
         .fullScreenCover(isPresented: $showingCamera) {
-            DualCameraView(activity: activity, you: UserDefaults.standard.string(forKey: "profileName") ?? "You") { proof in
+            DualCameraView(activity: activity,
+                           you: UserDefaults.standard.string(forKey: "profileName") ?? "You",
+                           triesLeft: triesLeft,
+                           onTake: { model.useMomentTry(in: circleID) }) { proof in
                 withAnimation(Motion.celebrate) { model.postProof(proof, in: circleID) }
             }
         }
@@ -242,7 +246,12 @@ struct ActivitySessionView: View {
                     secondaryButton("Later") { dismiss() }
                 } else {
                     primaryButton("Back to my orbit", systemImage: "arrow.right") { dismiss() }
-                    secondaryButton("Retake moment") { showingCamera = true }
+                    if triesLeft > 0 {
+                        secondaryButton(triesLeft == 1 ? "Retake moment (1 try left)"
+                                                       : "Retake moment (\(triesLeft) tries left)") {
+                            showingCamera = true
+                        }
+                    }
                 }
             }
         } else if !hasTimer {

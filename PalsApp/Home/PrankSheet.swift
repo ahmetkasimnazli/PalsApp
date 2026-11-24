@@ -12,7 +12,7 @@ struct PrankSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                PalsAvatar(name: friend.name, color: friend.color, size: 56)
+                PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: 56)
                 Spacer()
                 Button {
                     dismiss()
@@ -28,12 +28,12 @@ struct PrankSheet: View {
             }
 
             if friend.doneToday {
-                HighlightHeadline(lines: [friend.name], highlight: "did it today.", size: 44)
+                HighlightHeadline(lines: [friend.name], highlight: "did it today", size: 44)
                 Text("No prank needed. Respect. 💪")
                     .font(.palsBody(17))
                     .foregroundStyle(Color.palsInk.opacity(0.7))
             } else if let sent = friend.prankedToday {
-                HighlightHeadline(lines: [friend.name], highlight: "got \(sent.pastTense). \(sent.emoji)", size: 44)
+                HighlightHeadline(lines: [friend.name], highlight: "got \(sent.pastTense) \(sent.emoji)", size: 44)
                 Text("One prank a day. They'll get it the next time they open Pals.")
                     .font(.palsBody(17))
                     .foregroundStyle(Color.palsInk.opacity(0.7))
@@ -50,7 +50,7 @@ struct PrankSheet: View {
 
     private var pickPrank: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HighlightHeadline(lines: ["\(friend.name) skipped."], highlight: "Prank them.", size: 42)
+            HighlightHeadline(lines: ["\(friend.name) skipped"], highlight: "Prank them", size: 42)
 
             Text("They haven't done today's activity yet. Pick a card — it plays on their screen the next time they open Pals.")
                 .font(.palsBody(16))

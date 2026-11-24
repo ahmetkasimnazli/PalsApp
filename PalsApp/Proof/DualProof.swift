@@ -10,6 +10,8 @@ struct DualProof: Identifiable, Equatable {
     var authorColor: Color = .palsIndigo
     let time: Date
     var isYours = false
+    /// The pal's profile photo, for real pals.
+    var authorPhoto: UIImage? = nil
 
     static func == (a: DualProof, b: DualProof) -> Bool { a.id == b.id }
 

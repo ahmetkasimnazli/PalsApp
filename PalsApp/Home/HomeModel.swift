@@ -2,7 +2,7 @@ import Observation
 import SwiftUI
 
 struct Friend: Identifiable, Hashable {
-    let id = UUID()
+    var id = UUID()
     let name: String
     let color: Color
     var isActive: Bool
@@ -10,6 +10,10 @@ struct Friend: Identifiable, Hashable {
     var doneToday: Bool
     /// The prank you already sent them today (one per day).
     var prankedToday: PrankKind?
+    /// Their iCloud user ID in Pals, for real (non-demo) pals.
+    var cloudID: String? = nil
+    /// Their profile photo, for real pals.
+    var photo: UIImage? = nil
 }
 
 /// Something a circle can do on a day. Anyone in the circle can add one to the pool.
@@ -97,7 +101,7 @@ enum ActivityCategory: String, CaseIterable, Identifiable {
 }
 
 struct PalsCircle: Identifiable, Hashable {
-    let id = UUID()
+    var id = UUID()
     let name: String
     var emoji: String = "👯"
     var color: Color = .palsIndigo
@@ -106,6 +110,11 @@ struct PalsCircle: Identifiable, Hashable {
     /// Days in a row the whole circle has completed the activity.
     var streak: Int = 0
     var friends: [Friend]
+    /// Invite code of a real circle in iCloud; `nil` for demo circles.
+    var code: String? = nil
+
+    /// Key for what's saved on this phone about the circle (today's draw, your moment…).
+    var storageKey: String { code ?? name }
 
     /// The activity everyone in the circle does today.
     var today: CircleActivity { pick(for: .now) }
@@ -130,7 +139,8 @@ struct PalsCircle: Identifiable, Hashable {
     private func rawIndex(for date: Date) -> Int {
         // FNV-1a: stable across launches and devices (unlike `hashValue`).
         var hash: UInt64 = 0xcbf2_9ce4_8422_2325
-        for byte in "\(name)|\(PalsDay.key(date))".utf8 {
+        // Real circles use their invite code, which every member's phone shares.
+        for byte in "\(code ?? name)|\(PalsDay.key(date))".utf8 {
             hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3
         }
         return Int(hash % UInt64(pool.count))
@@ -145,11 +155,29 @@ enum PalsDay {
     }
 }
 
-/// State behind the home screen. Friends are mock data until there's a backend.
+/// State behind the home screen. Circles come from iCloud (CloudKit public database) once
+/// you're in at least one real circle; until then, and without iCloud, demo circles stand in.
 @Observable
 final class HomeModel {
     private(set) var circles: [PalsCircle]
-    var selectedCircleID: PalsCircle.ID
+    var selectedCircleID: PalsCircle.ID {
+        didSet { defaults.set(selectedCircle.storageKey, forKey: Self.selectedKey) }
+    }
+
+    /// Showing the built-in demo circles rather than real ones.
+    private(set) var isDemo = true
+    private(set) var cloudStatus: CloudStatus = .unknown
+    /// Last iCloud problem worth telling the user about.
+    var cloudError: String?
+
+    enum CloudStatus: Equatable { case unknown, signedOut, ready, failed }
+
+    @ObservationIgnored let cloud = CloudStore()
+    @ObservationIgnored private var myUserID: String?
+    /// Stable local IDs for real circles (by code) and pals (by iCloud user ID) across refreshes.
+    @ObservationIgnored private var circleIDs: [String: UUID] = [:]
+    @ObservationIgnored private var friendIDs: [String: UUID] = [:]
+    @ObservationIgnored private var touchedMembership = false
 
     /// The activity whose session (timer / proof) is open.
     var activeActivity: CircleActivity?
@@ -174,6 +202,8 @@ final class HomeModel {
     private static let lastCompletedKey = "lastCompletedDate"
     private static let myDoneKey = "myDoneToday"      // ["<day>|<circle name>"]
     private static let revealedKey = "revealedToday"  // ["<day>|<circle name>"]
+    private static let selectedKey = "selectedCircle"
+    private static let seenPranksKey = "seenPrankIDs"
 
     init() {
         var close = PalsCircle(name: "Close Friends", emoji: "🫶", color: .palsIndigo, pool: [
@@ -221,16 +251,17 @@ final class HomeModel {
         restoreDoneCircles()
         revealedCircles = restore(Self.revealedKey)
         restoreProofs()
+    }
 
-        // Demo: until there's a backend, a pal "pranks" you whenever you open the app
-        // without having done today's activity.
-        if !completedToday, let pranker = close.friends.last {
-            incomingPrank = IncomingPrank(
-                kind: PrankKind.allCases.randomElement() ?? .slap,
-                fromName: pranker.name,
-                fromColor: pranker.color
-            )
-        }
+    /// Demo circles only: a pal "pranks" you when you open the app without having done
+    /// today's activity, so the prank flow can be shown without a second phone.
+    func playDemoLaunchPrank() {
+        guard isDemo, !completedToday, let pranker = selectedCircle.friends.last else { return }
+        incomingPrank = IncomingPrank(
+            kind: PrankKind.allCases.randomElement() ?? .slap,
+            fromName: pranker.name,
+            fromColor: pranker.color
+        )
     }
 
     var selectedCircle: PalsCircle {
@@ -272,8 +303,12 @@ final class HomeModel {
 
     func completeTodayActivity(in circleID: PalsCircle.ID? = nil) {
         let circleID = circleID ?? selectedCircleID
+        let wasDone = doneCircles.contains(circleID)
         doneCircles.insert(circleID)
         saveDoneCircles()
+        if !wasDone, let code = circle(id: circleID)?.code {
+            push { try await $0.markDone(code: code, day: PalsDay.key(.now)) }
+        }
         // The streak grows once a day, the first time you finish a circle's activity.
         let last = defaults.object(forKey: Self.lastCompletedKey) as? Date
         guard !(last.map(Calendar.current.isDateInToday) ?? false) else { return }
@@ -316,12 +351,16 @@ final class HomeModel {
         var activity = activity
         activity.addedBy = "You"
         circles[index].pool.append(activity)
+        if let code = circles[index].code {
+            let name = myName
+            push { try await $0.addActivity(activity, code: code, addedBy: name) }
+        }
     }
 
     // MARK: - Circles
 
     /// Demo: creates a circle with a few pals from your other circles.
-    func createCircle(name: String, emoji: String, activities: [String], memberIDs: Set<Friend.ID>) {
+    private func createDemoCircle(name: String, emoji: String, activities: [String], memberIDs: Set<Friend.ID>) {
         var seen = Set<String>()
         let members = circles.flatMap(\.friends)
             .filter { memberIDs.contains($0.id) && seen.insert($0.name).inserted }
@@ -343,11 +382,14 @@ final class HomeModel {
 
     // MARK: - Pranks
 
-    func sendPrank(_ kind: PrankKind, to friendID: Friend.ID) {
-        // TODO: send to the backend so it's played on their phone.
-        for c in circles.indices {
+    func sendPrank(_ kind: PrankKind, to friendID: Friend.ID, in circleID: PalsCircle.ID? = nil) {
+        let circleID = circleID ?? selectedCircleID
+        for c in circles.indices where isDemo || circles[c].id == circleID {
             for f in circles[c].friends.indices where circles[c].friends[f].id == friendID {
                 circles[c].friends[f].prankedToday = kind
+                if let code = circles[c].code, let to = circles[c].friends[f].cloudID {
+                    push { try await $0.sendPrank(kind, to: to, code: code, day: PalsDay.key(.now)) }
+                }
             }
         }
     }
@@ -364,6 +406,10 @@ final class HomeModel {
 
     /// Demo stand-in for a push from a pal: someone in your circle pranks you right now.
     func receiveDemoPrank() {
+        guard isDemo else {
+            Task { await refresh() }
+            return
+        }
         let pals = selectedCircle.friends
         let pranker = pals.filter(\.doneToday).randomElement() ?? pals.randomElement()
         guard let pranker else { return }
@@ -383,6 +429,33 @@ final class HomeModel {
 
     func myProof(in circle: PalsCircle) -> DualProof? { myProofs[circle.id] }
 
+    /// Takes allowed per circle per day: the first moment plus two retakes.
+    static let momentTries = 3
+    private static let momentTriesKey = "momentTriesUsed" // ["<day>|<circle name>": count]
+
+    func momentTriesLeft(in circle: PalsCircle) -> Int {
+        _ = triesVersion // observed, so views update after a take
+        let used = (defaults.dictionary(forKey: Self.momentTriesKey) as? [String: Int])?[triesKey(circle)] ?? 0
+        return max(0, Self.momentTries - used)
+    }
+
+    /// Counts one take (back photo + selfie) against today's tries.
+    func useMomentTry(in circleID: PalsCircle.ID) {
+        guard let circle = circle(id: circleID) else { return }
+        let today = PalsDay.key(.now)
+        // Keep only today's counts.
+        var used = (defaults.dictionary(forKey: Self.momentTriesKey) as? [String: Int] ?? [:])
+            .filter { $0.key.hasPrefix(today) }
+        used[triesKey(circle), default: 0] += 1
+        defaults.set(used, forKey: Self.momentTriesKey)
+        triesVersion += 1
+    }
+
+    /// Bumped when tries change, so views reading `momentTriesLeft` refresh.
+    private(set) var triesVersion = 0
+
+    private func triesKey(_ circle: PalsCircle) -> String { "\(PalsDay.key(.now))|\(circle.storageKey)" }
+
     /// Everyone's proof for today in this circle: yours first, then the newest.
     func proofs(in circle: PalsCircle) -> [DualProof] {
         let pals = circle.friends.filter(\.doneToday).compactMap { palProofs[$0.id] }
@@ -395,14 +468,30 @@ final class HomeModel {
         let circleID = circleID ?? selectedCircleID
         guard let circle = circle(id: circleID) else { return }
         myProofs[circleID] = proof
-        ProofStore.save(proof, circle: circle.name)
+        ProofStore.save(proof, circle: circle.storageKey)
+        if let code = circle.code {
+            // Marks you done in the cloud too (moment + done in one save).
+            doneCircles.insert(circleID)
+            saveDoneCircles()
+            push { try await $0.postMoment(code: code, day: PalsDay.key(.now), back: proof.back, front: proof.front) }
+        }
         if !isDone(in: circle) { completeTodayActivity(in: circleID) }
+        else { bumpStreakIfFirstToday() }
+    }
+
+    /// The streak grows once a day, the first time you finish any circle's activity.
+    private func bumpStreakIfFirstToday() {
+        let last = defaults.object(forKey: Self.lastCompletedKey) as? Date
+        guard !(last.map(Calendar.current.isDateInToday) ?? false) else { return }
+        streakDays += 1
+        defaults.set(streakDays, forKey: Self.streakKey)
+        defaults.set(Date(), forKey: Self.lastCompletedKey)
     }
 
     private func restoreProofs() {
         let me = defaults.string(forKey: "profileName") ?? "You"
         for circle in circles {
-            if let proof = ProofStore.load(circle: circle.name, author: me) {
+            if let proof = ProofStore.load(circle: circle.storageKey, author: me) {
                 myProofs[circle.id] = proof
             }
             for (index, friend) in circle.friends.filter(\.doneToday).enumerated() {
@@ -413,12 +502,215 @@ final class HomeModel {
         }
     }
 
+    // MARK: - iCloud
+
+    private var myName: String {
+        let name = defaults.string(forKey: "profileName") ?? ""
+        return name.isEmpty ? "Pal" : name
+    }
+
+    private var myProfile: MemberProfile { MemberProfile(name: myName, photo: ProfilePhotoStore.load()) }
+
+    /// You can make and join real circles (signed in to iCloud).
+    var canUseCloud: Bool { cloudStatus == .ready }
+
+    /// Pulls your real circles from iCloud. With none (or no iCloud), the demo circles stay.
+    func refresh() async {
+        guard await cloud.isAvailable() else {
+            cloudStatus = .signedOut
+            return
+        }
+        do {
+            let me = try await cloud.userID()
+            myUserID = me
+            let fetched = try await cloud.fetchMyCircles()
+            cloudStatus = .ready
+            if !touchedMembership {
+                touchedMembership = true
+                // Once per launch: your current name/photo and "active now" in every circle,
+                // and yesterday-and-older moments cleared out.
+                let profile = myProfile
+                for circle in fetched {
+                    push { try await $0.saveMember(code: circle.code, me: profile) }
+                }
+                push { try await $0.deleteOldMoments() }
+            }
+            apply(fetched, me: me)
+        } catch {
+            cloudStatus = .failed
+            cloudError = CloudStore.message(for: error)
+        }
+    }
+
+    /// Your name or photo changed: update it in every real circle.
+    func profileChanged() {
+        let profile = myProfile
+        for code in circles.compactMap(\.code) {
+            push { try await $0.saveMember(code: code, me: profile) }
+        }
+    }
+
+    /// Creates a real circle in iCloud, or a demo one without iCloud. Returns the invite code.
+    @discardableResult
+    func createCircle(name: String, emoji: String, activities: [String],
+                      memberIDs: Set<Friend.ID>) async -> String? {
+        guard canUseCloud else {
+            createDemoCircle(name: name, emoji: emoji, activities: activities, memberIDs: memberIDs)
+            return nil
+        }
+        do {
+            let colorIndex = isDemo ? 0 : circles.count % 3
+            let code = try await cloud.createCircle(name: name, emoji: emoji, colorIndex: colorIndex,
+                                                    activities: activities.map(CircleActivity.suggestion),
+                                                    me: myProfile)
+            defaults.set(code, forKey: Self.selectedKey)
+            await refresh()
+            return code
+        } catch {
+            cloudError = CloudStore.message(for: error)
+            return nil
+        }
+    }
+
+    /// Joins a real circle by its invite code. Returns an error message, or `nil` on success.
+    func joinCircle(code: String) async -> String? {
+        guard canUseCloud else { return "Sign in to iCloud in Settings to join a circle." }
+        let code = CloudStore.normalized(code)
+        guard code.count == 8 else { return "Invite codes have 8 letters and numbers." }
+        do {
+            guard try await cloud.join(code: code, me: myProfile) else {
+                return "No circle has that code. Check it with your pal."
+            }
+            defaults.set(code, forKey: Self.selectedKey)
+            await refresh()
+            return nil
+        } catch {
+            return CloudStore.message(for: error)
+        }
+    }
+
+    /// Runs a write in the background; failures surface as `cloudError`.
+    private func push(_ write: @escaping (CloudStore) async throws -> Void) {
+        let cloud = cloud
+        Task {
+            do { try await write(cloud) } catch { cloudError = CloudStore.message(for: error) }
+        }
+    }
+
+    /// Replaces the circles with what's in iCloud, keeping local IDs and today's state.
+    private func apply(_ fetched: [CloudCircle], me: String) {
+        guard !fetched.isEmpty else { return }
+        let today = PalsDay.key(.now)
+        let palette: [Color] = [.palsIndigo, .palsPink, .palsBlue]
+
+        var mapped: [PalsCircle] = []
+        var cloudDone = Set<PalsCircle.ID>()
+        var mine: [PalsCircle.ID: DualProof] = [:]
+        var pals: [Friend.ID: DualProof] = [:]
+        var incoming: [(CloudPrank, CloudMember?)] = []
+
+        for remote in fetched {
+            let id = circleIDs[remote.code] ?? UUID()
+            circleIDs[remote.code] = id
+            let doneToday = remote.done[today] ?? []
+
+            let friends: [Friend] = remote.members.filter { $0.userID != me }.map { member in
+                let friendID = friendIDs[member.userID] ?? UUID()
+                friendIDs[member.userID] = friendID
+                return Friend(
+                    id: friendID,
+                    name: member.name,
+                    color: palette[Self.stableHash(member.userID) % palette.count],
+                    isActive: member.lastActive.map { Date.now.timeIntervalSince($0) < 10 * 60 } ?? false,
+                    doneToday: doneToday.contains(member.userID),
+                    prankedToday: remote.pranks.first { $0.fromID == me && $0.toID == member.userID }?.kind,
+                    cloudID: member.userID,
+                    photo: member.avatar
+                )
+            }
+
+            var circle = PalsCircle(
+                name: remote.name, emoji: remote.emoji, color: palette[remote.colorIndex % palette.count],
+                pool: remote.activities.map {
+                    CircleActivity(emoji: $0.emoji, title: $0.title, minutes: $0.minutes, addedBy: $0.addedBy)
+                },
+                streak: Self.streak(remote.done, members: Set(remote.members.map(\.userID))),
+                friends: friends,
+                code: remote.code
+            )
+            circle.id = id
+            mapped.append(circle)
+
+            if doneToday.contains(me) { cloudDone.insert(id) }
+            for moment in remote.moments {
+                if moment.userID == me {
+                    mine[id] = DualProof(back: moment.back, front: moment.front, author: myName,
+                                         time: moment.postedAt, isYours: true)
+                } else if let friend = friends.first(where: { $0.cloudID == moment.userID }) {
+                    pals[friend.id] = DualProof(back: moment.back, front: moment.front, author: friend.name,
+                                                authorColor: friend.color, time: moment.postedAt,
+                                                authorPhoto: friend.photo)
+                }
+            }
+            for prank in remote.pranks where prank.toID == me {
+                incoming.append((prank, remote.members.first { $0.userID == prank.fromID }))
+            }
+        }
+
+        let wasDemo = isDemo
+        circles = mapped
+        isDemo = false
+        if wasDemo || circle(id: selectedCircleID) == nil {
+            let saved = defaults.string(forKey: Self.selectedKey)
+            selectedCircleID = mapped.first { $0.storageKey == saved }?.id ?? mapped[0].id
+        }
+        // Done = what iCloud says, plus anything you just did that's still on its way up.
+        doneCircles = cloudDone.union(doneCircles.filter { id in mapped.contains { $0.id == id } })
+        revealedCircles = restore(Self.revealedKey)
+        myProofs = myProofs.filter { id, _ in mapped.contains { $0.id == id } }.merging(mine) { _, remote in remote }
+        palProofs = pals
+
+        // Play the first prank you haven't seen yet.
+        var seen = Set(defaults.stringArray(forKey: Self.seenPranksKey) ?? [])
+        if incomingPrank == nil, let (prank, from) = incoming.first(where: { !seen.contains($0.0.id) }) {
+            seen.insert(prank.id)
+            defaults.set(Array(seen), forKey: Self.seenPranksKey)
+            incomingPrank = IncomingPrank(kind: prank.kind, fromName: from?.name ?? "A pal",
+                                          fromColor: .palsPink)
+        }
+    }
+
+    /// Same number on every launch and device (unlike `hashValue`), for a pal's color.
+    static func stableHash(_ text: String) -> Int {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in text.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+        return Int(hash % 1_000_003)
+    }
+
+    /// Days in a row (up to today) on which everyone in the circle was done.
+    /// Today only counts once it's complete; until then the streak runs to yesterday.
+    static func streak(_ done: [String: Set<String>], members: Set<String>) -> Int {
+        guard !members.isEmpty else { return 0 }
+        let calendar = Calendar.current
+        var day = Date.now
+        var count = 0
+        if members.isSubset(of: done[PalsDay.key(day)] ?? []) { count += 1 }
+        for _ in 0..<365 {
+            day = calendar.date(byAdding: .day, value: -1, to: day) ?? day
+            guard members.isSubset(of: done[PalsDay.key(day)] ?? []) else { break }
+            count += 1
+        }
+        return count
+    }
+
     // MARK: - Demo helpers
 
     /// Undo today's activity and sent pranks so the flow can be shown again.
     func resetToday() {
-        for circle in circles { ProofStore.delete(circle: circle.name) }
+        for circle in circles { ProofStore.delete(circle: circle.storageKey) }
         myProofs = [:]
+        defaults.removeObject(forKey: Self.momentTriesKey)
+        triesVersion += 1
         doneCircles = []
         saveDoneCircles()
         revealedCircles = []
@@ -439,13 +731,13 @@ final class HomeModel {
     /// Mock circles get new IDs every launch, so today's progress is saved by name.
     private func saveDoneCircles() {
         let day = PalsDay.key(.now)
-        let entries = circles.filter { doneCircles.contains($0.id) }.map { "\(day)|\($0.name)" }
+        let entries = circles.filter { doneCircles.contains($0.id) }.map { "\(day)|\($0.storageKey)" }
         defaults.set(entries, forKey: Self.myDoneKey)
     }
 
     private func save(_ ids: Set<PalsCircle.ID>, to key: String) {
         let day = PalsDay.key(.now)
-        defaults.set(circles.filter { ids.contains($0.id) }.map { "\(day)|\($0.name)" }, forKey: key)
+        defaults.set(circles.filter { ids.contains($0.id) }.map { "\(day)|\($0.storageKey)" }, forKey: key)
     }
 
     private func restore(_ key: String) -> Set<PalsCircle.ID> {
@@ -454,7 +746,7 @@ final class HomeModel {
         for entry in defaults.stringArray(forKey: key) ?? [] {
             let parts = entry.split(separator: "|", maxSplits: 1).map(String.init)
             guard parts.count == 2, parts[0] == day,
-                  let circle = circles.first(where: { $0.name == parts[1] }) else { continue }
+                  let circle = circles.first(where: { $0.storageKey == parts[1] }) else { continue }
             ids.insert(circle.id)
         }
         return ids
@@ -465,7 +757,7 @@ final class HomeModel {
         for entry in defaults.stringArray(forKey: Self.myDoneKey) ?? [] {
             let parts = entry.split(separator: "|", maxSplits: 1).map(String.init)
             guard parts.count == 2, parts[0] == day,
-                  let circle = circles.first(where: { $0.name == parts[1] }) else { continue }
+                  let circle = circles.first(where: { $0.storageKey == parts[1] }) else { continue }
             doneCircles.insert(circle.id)
         }
     }

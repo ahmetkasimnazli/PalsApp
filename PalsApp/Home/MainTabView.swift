@@ -18,6 +18,7 @@ struct MainTabView: View {
     /// A quick zoom "punch" of the whole app on impact.
     @State private var punched = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -97,9 +98,30 @@ struct MainTabView: View {
             try? await ShaderLibrary.impactWave(.float2(0, 0), .float(0), .float(0)).compile(as: .layerEffect)
         }
         .task {
+            // Real circles first; the demo launch prank only plays when there are none.
+            await model.refresh()
+            model.playDemoLaunchPrank()
             // Pranks play when you open the app — give the home screen a moment first.
             try? await Task.sleep(for: .milliseconds(700))
             playPendingPrank()
+        }
+        .task(id: scenePhase) {
+            // Keep real circles fresh while the app is open: pals' moments, pranks, who's done.
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { return }
+                await model.refresh()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await model.refresh() } }
+        }
+        .alert("iCloud", isPresented: Binding(get: { model.cloudError != nil },
+                                              set: { if !$0 { model.cloudError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.cloudError ?? "")
         }
         .onChange(of: model.incomingPrank) { _, _ in
             playPendingPrank()

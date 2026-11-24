@@ -81,7 +81,7 @@ struct OrbitView: View {
     }
 
     private func friendView(_ friend: Friend) -> some View {
-        PalsAvatar(name: friend.name, color: friend.color, size: 76)
+        PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: 76)
             .overlay(alignment: .bottomTrailing) {
                 if friend.isActive {
                     Circle()

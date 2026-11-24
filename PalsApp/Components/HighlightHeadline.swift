@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Big display headline, one line per entry,
-/// e.g. "Get / things / done / **together.**"
+/// e.g. "Get / things / done / **together**"
 struct HighlightHeadline: View {
     let lines: [String]
     let highlight: String
@@ -10,10 +10,11 @@ struct HighlightHeadline: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: -size * 0.2) {
+            // Headlines never end in a period ("?" and "!" stay).
             ForEach(lines, id: \.self) { line in
-                Text(line)
+                Text(Self.trimmed(line))
             }
-            Text(highlight)
+            Text(Self.trimmed(highlight))
         }
         .font(.palsDisplay(size))
         .tracking(-size * 0.03)
@@ -22,6 +23,12 @@ struct HighlightHeadline: View {
         .minimumScaleFactor(0.6)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+    }
+
+    private static func trimmed(_ text: String) -> String {
+        var text = text
+        while text.hasSuffix(".") { text.removeLast() }
+        return text
     }
 }
 
@@ -49,8 +56,8 @@ struct BurstMarks: View {
 
 #Preview {
     VStack(alignment: .leading, spacing: 40) {
-        HighlightHeadline(lines: ["Get", "things", "done"], highlight: "together.")
-        HighlightHeadline(lines: ["Set Up", "Your"], highlight: "Profile.", size: 48)
+        HighlightHeadline(lines: ["Get", "things", "done"], highlight: "together")
+        HighlightHeadline(lines: ["Set Up", "Your"], highlight: "Profile", size: 48)
         BurstMarks()
     }
     .padding()

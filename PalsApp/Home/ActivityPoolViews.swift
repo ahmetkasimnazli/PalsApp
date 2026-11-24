@@ -21,7 +21,7 @@ struct AddActivitySheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .top) {
-                    HighlightHeadline(lines: ["New"], highlight: "activity.", size: 44)
+                    HighlightHeadline(lines: ["New"], highlight: "activity", size: 44)
                     Spacer()
                     CloseButton { dismiss() }
                 }
@@ -199,7 +199,7 @@ struct MiniAvatars: View {
                         PalsAvatar(name: UserDefaults.standard.string(forKey: "profileName") ?? "You",
                                    photo: ProfilePhotoStore.load(), size: size, glass: glass)
                     } else {
-                        PalsAvatar(name: person.name, color: person.color, size: size, glass: glass)
+                        PalsAvatar(name: person.name, photo: person.photo, color: person.color, size: size, glass: glass)
                     }
                 }
                 if people.count > 4 {

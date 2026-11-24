@@ -57,7 +57,7 @@ struct ProofCard: View {
         VStack(alignment: .leading, spacing: 8) {
             DualProofView(proof: proof, cornerRadius: 20, interactive: interactive)
             HStack(spacing: 8) {
-                PalsAvatar(name: proof.author, photo: proof.isYours ? ProfilePhotoStore.load() : nil,
+                PalsAvatar(name: proof.author, photo: proof.isYours ? ProfilePhotoStore.load() : proof.authorPhoto,
                            color: proof.authorColor, size: 26, glass: false)
                 Text(proof.isYours ? "You" : proof.author)
                     .font(.pals(15))

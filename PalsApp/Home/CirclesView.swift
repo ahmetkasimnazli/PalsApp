@@ -7,18 +7,32 @@ struct CirclesView: View {
     var onOpenOrbit: () -> Void
 
     @State private var showingNewCircle = false
+    @State private var showingJoin = false
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    HighlightHeadline(lines: ["Your"], highlight: "circles.", size: 52)
+                    HighlightHeadline(lines: ["Your"], highlight: "circles", size: 52)
                         .padding(.top, 12)
 
                     Text("Every day each circle gets one activity from its pool. Skip it, and your pals get to prank you.")
                         .font(.palsBody(16))
                         .foregroundStyle(Color.palsInk.opacity(0.65))
                         .padding(.top, 10)
+
+                    if model.isDemo {
+                        Label(model.cloudStatus == .signedOut
+                              ? "These are demo circles. Sign in to iCloud to make real ones."
+                              : "These are demo circles. Create one or join with a code to start for real.",
+                              systemImage: "sparkles")
+                            .font(.palsBody(14))
+                            .foregroundStyle(Color.palsBlue)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.palsBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .padding(.top, 14)
+                    }
 
                     VStack(spacing: 14) {
                         ForEach(model.circles) { circle in
@@ -50,6 +64,22 @@ struct CirclesView: View {
                     .buttonStyle(PressableStyle())
                     .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
                     .padding(.top, 22)
+
+                    Button {
+                        showingJoin = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "person.badge.plus")
+                            Text("Join with a code")
+                        }
+                        .font(.pals(18))
+                        .foregroundStyle(Color.palsInk)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(PressableStyle())
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .padding(.top, 10)
                     .padding(.bottom, 24)
                 }
                 .padding(.horizontal, 20)
@@ -64,6 +94,10 @@ struct CirclesView: View {
         }
         .sheet(isPresented: $showingNewCircle) {
             NewCircleSheet(model: model)
+        }
+        .sheet(isPresented: $showingJoin) {
+            JoinCircleSheet(model: model)
+                .presentationDetents([.medium])
         }
     }
 }
@@ -138,7 +172,7 @@ private struct AvatarStack: View {
     var body: some View {
         HStack(spacing: -12) {
             ForEach(friends.prefix(5)) { friend in
-                PalsAvatar(name: friend.name, color: friend.color, size: 36)
+                PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: 36)
             }
             if friends.count > 5 {
                 Text("+\(friends.count - 5)")
@@ -187,7 +221,7 @@ private struct CircleDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center, spacing: 10) {
                         Text(circle.emoji).font(.system(size: 44))
-                        HighlightHeadline(lines: [], highlight: "\(circle.name).", size: 40)
+                        HighlightHeadline(lines: [], highlight: circle.name, size: 40)
                     }
 
                     activityCard(circle)
@@ -218,6 +252,11 @@ private struct CircleDetailView: View {
                     }
                     .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .padding(.top, 10)
+
+                    if let code = circle.code {
+                        InviteCard(circleName: circle.name, code: code)
+                            .padding(.top, 22)
+                    }
 
                     if circle.id != model.selectedCircleID {
                         Button {
@@ -252,7 +291,7 @@ private struct CircleDetailView: View {
                 PrankSheet(
                     friend: model.friend(id: friend.id) ?? friend,
                     onSend: { kind in
-                        withAnimation(Motion.update) { model.sendPrank(kind, to: friend.id) }
+                        withAnimation(Motion.update) { model.sendPrank(kind, to: friend.id, in: circleID) }
                         Task {
                             try? await Task.sleep(for: .milliseconds(450))
                             model.playSentPrank(kind, to: friend)
@@ -367,7 +406,7 @@ private struct CircleDetailView: View {
 
     private func memberRow(_ friend: Friend) -> some View {
         HStack(spacing: 14) {
-            PalsAvatar(name: friend.name, color: friend.color, size: 46)
+            PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: 46)
                 .overlay(alignment: .bottomTrailing) {
                     if friend.isActive {
                         Circle()
@@ -429,19 +468,56 @@ private struct NewCircleSheet: View {
     @State private var emoji = "🎯"
     @State private var picked: Set<String> = ["Walk for 5 minutes"]
     @State private var members = Set<Friend.ID>()
+    @State private var creating = false
+    /// Set once a real circle exists, to show its invite code.
+    @State private var createdCode: String?
 
     private let emojis = ["🎯", "📚", "🧘", "🏃", "🎸", "🥗", "💧", "☀️"]
     private var activities: [String] { CircleActivity.suggestions.map(\.title) }
 
     private var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && !members.isEmpty && !picked.isEmpty
+        // Real circles start with just you; pals join with the invite code.
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !picked.isEmpty
+            && (model.canUseCloud || !members.isEmpty) && !creating
     }
 
     var body: some View {
+        if let createdCode {
+            createdView(code: createdCode)
+        } else {
+            form
+        }
+    }
+
+    /// After a real circle is made: its invite code, ready to share.
+    private func createdView(code: String) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HighlightHeadline(lines: ["Circle"], highlight: "created", size: 44)
+            Text("Share the code with your pals. They open Pals, tap Join with a code and type it in.")
+                .font(.palsBody(16))
+                .foregroundStyle(Color.palsInk.opacity(0.65))
+            InviteCard(circleName: name, code: code)
+            Spacer()
+            Button { dismiss() } label: {
+                Text("Done")
+                    .font(.pals(20, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 58)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(PressableStyle())
+            .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.palsOffWhite.ignoresSafeArea())
+    }
+
+    private var form: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 HStack {
-                    HighlightHeadline(lines: ["New"], highlight: "circle.", size: 44)
+                    HighlightHeadline(lines: ["New"], highlight: "circle", size: 44)
                     Spacer()
                     Button {
                         dismiss()
@@ -489,6 +565,11 @@ private struct NewCircleSheet: View {
                     }
                 }
 
+                if model.canUseCloud {
+                    Label("You'll get an invite code to share with your pals.", systemImage: "person.2.badge.plus")
+                        .font(.palsBody(15))
+                        .foregroundStyle(Color.palsInk.opacity(0.6))
+                } else {
                 section("Pals") {
                     VStack(spacing: 0) {
                         ForEach(model.allPals) { pal in
@@ -496,7 +577,7 @@ private struct NewCircleSheet: View {
                                 if members.contains(pal.id) { members.remove(pal.id) } else { members.insert(pal.id) }
                             } label: {
                                 HStack(spacing: 12) {
-                                    PalsAvatar(name: pal.name, color: pal.color, size: 38)
+                                    PalsAvatar(name: pal.name, photo: pal.photo, color: pal.color, size: 38)
                                     Text(pal.name)
                                         .font(.pals(17))
                                         .foregroundStyle(Color.palsInk)
@@ -515,13 +596,21 @@ private struct NewCircleSheet: View {
                     }
                     .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
+                }
 
                 Button {
-                    model.createCircle(name: name.trimmingCharacters(in: .whitespaces), emoji: emoji,
-                                       activities: activities.filter(picked.contains), memberIDs: members)
-                    dismiss()
+                    creating = true
+                    Task {
+                        let code = await model.createCircle(name: name.trimmingCharacters(in: .whitespaces),
+                                                            emoji: emoji,
+                                                            activities: activities.filter(picked.contains),
+                                                            memberIDs: members)
+                        creating = false
+                        if let code { withAnimation(Motion.appear) { createdCode = code } }
+                        else if model.cloudError == nil { dismiss() }
+                    }
                 } label: {
-                    Text("Create circle")
+                    Text(creating ? "Creating…" : "Create circle")
                         .font(.pals(20, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 58)
@@ -607,4 +696,109 @@ struct FlowLayout: Layout {
 
 #Preview {
     CirclesView(model: HomeModel(), path: .constant([]), onOpenOrbit: {})
+}
+
+// MARK: - Invites
+
+/// A real circle's invite code, big enough to read out, with a share button.
+struct InviteCard: View {
+    let circleName: String
+    let code: String
+
+    private var spaced: String { "\(code.prefix(4)) \(code.suffix(4))" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("INVITE CODE")
+                .font(.pals(13))
+                .tracking(1)
+                .foregroundStyle(Color.palsInk.opacity(0.5))
+            HStack {
+                Text(spaced)
+                    .font(.palsDisplay(34))
+                    .monospaced()
+                    .foregroundStyle(Color.palsInk)
+                    .textSelection(.enabled)
+                    .accessibilityLabel("Invite code \(code.map(String.init).joined(separator: " "))")
+                Spacer()
+                ShareLink(item: "Join my circle \"\(circleName)\" on Pals! Open Pals, tap Join with a code and enter \(spaced).") {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 48, height: 48)
+                }
+                .glassEffect(.regular.tint(.palsBlue).interactive(), in: .circle)
+                .accessibilityLabel("Share invite")
+            }
+        }
+        .padding(18)
+        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+/// Type a pal's invite code to join their circle.
+private struct JoinCircleSheet: View {
+    let model: HomeModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var code = ""
+    @State private var joining = false
+    @State private var error: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HighlightHeadline(lines: ["Join a"], highlight: "circle", size: 44)
+            Text("Type the 8-character code a pal shared with you.")
+                .font(.palsBody(16))
+                .foregroundStyle(Color.palsInk.opacity(0.65))
+
+            TextField("ABCD 2345", text: $code)
+                .font(.palsDisplay(30))
+                .monospaced()
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .focused($focused)
+                .submitLabel(.join)
+                .onSubmit(join)
+                .padding(.horizontal, 22)
+                .frame(height: 64)
+                .background(.white, in: Capsule())
+
+            if let error {
+                Text(error)
+                    .font(.palsBody(14))
+                    .foregroundStyle(Color.palsPink)
+            }
+
+            Spacer(minLength: 0)
+
+            Button(action: join) {
+                Text(joining ? "Joining…" : "Join")
+                    .font(.pals(20, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 58)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(PressableStyle())
+            .glassEffect(.regular.tint(.palsBlue.opacity(canJoin ? 1 : 0.4)).interactive(canJoin), in: .capsule)
+            .disabled(!canJoin)
+        }
+        .padding(24)
+        .background(Color.palsOffWhite.ignoresSafeArea())
+        .onAppear { focused = true }
+    }
+
+    private var canJoin: Bool { CloudStore.normalized(code).count == 8 && !joining }
+
+    private func join() {
+        guard canJoin else { return }
+        joining = true
+        error = nil
+        Task {
+            error = await model.joinCircle(code: code)
+            joining = false
+            if error == nil { dismiss() }
+        }
+    }
 }

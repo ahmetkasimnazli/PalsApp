@@ -31,7 +31,7 @@ struct WelcomeView: View {
                     .padding(.leading, -16)
                     .accessibilityLabel("Pals")
 
-                HighlightHeadline(lines: ["Show up."], highlight: "Or get pranked.", size: 50, color: .palsOffWhite)
+                HighlightHeadline(lines: ["Show up"], highlight: "Or get pranked", size: 50, color: .palsOffWhite)
                     .padding(.top, 14)
 
                 Image("WelcomeGroup")

@@ -352,7 +352,7 @@ struct ProgressDeckView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HighlightHeadline(lines: ["Your"], highlight: "deck.", size: 52)
+                HighlightHeadline(lines: ["Your"], highlight: "deck", size: 52)
                     .padding(.top, 12)
 
                 HStack(spacing: 10) {

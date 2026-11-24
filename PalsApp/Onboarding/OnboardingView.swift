@@ -7,8 +7,8 @@ struct OnboardingPage: Identifiable {
     let image: String
 
     static let all: [OnboardingPage] = [
-        OnboardingPage(id: 0, lines: ["Get", "things", "done"], highlight: "together.", image: "OnboardingHands"),
-        OnboardingPage(id: 1, lines: ["Turn", "small", "time into"], highlight: "real progress.", image: "OnboardingStopwatch"),
+        OnboardingPage(id: 0, lines: ["Get", "things", "done"], highlight: "together", image: "OnboardingHands"),
+        OnboardingPage(id: 1, lines: ["Turn", "small", "time into"], highlight: "real progress", image: "OnboardingStopwatch"),
     ]
 }
 

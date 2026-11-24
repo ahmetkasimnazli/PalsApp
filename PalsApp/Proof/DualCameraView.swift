@@ -1,11 +1,14 @@
 import AVFoundation
 import SwiftUI
 
-/// Full-screen proof camera. One shutter press takes the back photo, flips to the front
-/// camera and takes the selfie a moment later, like BeReal. Then you review and post.
+/// Full-screen moment camera, in two unhurried steps: first the back camera (what you're
+/// doing), then the front camera (you). Each finished pair uses one of today's tries.
 struct DualCameraView: View {
     let activity: CircleActivity
     let you: String
+    /// Tries left when the camera opened.
+    let triesLeft: Int
+    var onTake: () -> Void
     var onPost: (DualProof) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -13,6 +16,17 @@ struct DualCameraView: View {
     @State private var camera = DualCamera()
     @State private var shot: DualProof?
     @State private var flash = false
+    /// Takes finished since the camera opened.
+    @State private var taken = 0
+    /// Tries left when the camera opened. Kept fixed: the model's count drops as takes are
+    /// made, and `taken` already accounts for those.
+    @State private var startTries: Int?
+
+    private var left: Int { max(0, (startTries ?? triesLeft) - taken) }
+    /// Which try this is (1-based), for the header.
+    private var tryNumber: Int { Model.tries - left + (shot == nil ? 1 : 0) }
+
+    private enum Model { static let tries = HomeModel.momentTries }
 
     var body: some View {
         ZStack {
@@ -40,6 +54,7 @@ struct DualCameraView: View {
                 .allowsHitTesting(false)
         }
         .preferredColorScheme(.dark)
+        .onAppear { if startTries == nil { startTries = triesLeft } }
         .task { await camera.start() }
         .onDisappear { camera.stop() }
         .sensoryFeedback(.impact(weight: .medium), trigger: camera.shots)
@@ -47,15 +62,20 @@ struct DualCameraView: View {
 
     private var header: some View {
         HStack {
-            Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
+            // Out of tries with an unposted take: the only way on is to post it.
+            if !(shot != nil && left == 0) {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(PressableStyle())
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Close")
+            } else {
+                Color.clear.frame(width: 44, height: 44)
             }
-            .buttonStyle(PressableStyle())
-            .glassEffect(.regular.interactive(), in: .circle)
-            .accessibilityLabel("Close")
 
             Spacer()
 
@@ -66,6 +86,10 @@ struct DualCameraView: View {
                     .font(.palsBody(14))
                     .opacity(0.7)
                     .lineLimit(1)
+                Text("Try \(min(max(tryNumber, 1), Model.tries)) of \(Model.tries)")
+                    .font(.pals(13))
+                    .opacity(0.55)
+                    .padding(.top, 2)
             }
             .foregroundStyle(.white)
 
@@ -99,16 +123,15 @@ struct DualCameraView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .transition(.scale(scale: 0.9, anchor: .topLeading).combined(with: .opacity))
                 }
-                if camera.isCapturing {
-                    Text(camera.backShot == nil ? "Hold still…" : "Now smile! 😁")
-                        .font(.pals(22, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
-                        .glassEffect(.regular, in: .capsule)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, 20)
-                }
+                Text(camera.backShot == nil ? "1 / 2 · What you're doing" : "2 / 2 · Now you 😁")
+                    .font(.pals(17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .glassEffect(.regular, in: .capsule)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 16)
+                    .contentTransition(.opacity)
             case .denied:
                 shape.fill(.white.opacity(0.08))
                 message(icon: "camera.fill", title: "Camera access is off",
@@ -121,10 +144,10 @@ struct DualCameraView: View {
                 message(icon: "camera.badge.ellipsis", title: "No camera here",
                         text: "The Simulator can't take photos. Use sample photos to try the flow.",
                         button: "Use sample photos") {
-                    withAnimation(Motion.appear) {
-                        shot = DemoProofArt.make(for: activity, author: you, color: .palsBlue,
-                                                 photo: ProfilePhotoStore.load(), isYours: true)
-                    }
+                    guard left > 0 else { return }
+                    finishTake(DemoProofArt.make(for: activity, author: you, color: .palsBlue,
+                                                 photo: ProfilePhotoStore.load(), isYours: true,
+                                                 variant: taken % 3 + 1))
                 }
             }
         }
@@ -157,59 +180,97 @@ struct DualCameraView: View {
     @ViewBuilder
     private var controls: some View {
         if let shot {
-            HStack(spacing: 12) {
-                Button {
-                    withAnimation(Motion.appear) { self.shot = nil }
-                    camera.reset()
-                } label: {
-                    Label("Retake", systemImage: "arrow.counterclockwise")
-                        .font(.pals(18))
+            VStack(spacing: 10) {
+                HStack(spacing: 12) {
+                    if left > 0 {
+                        Button {
+                            withAnimation(Motion.appear) { self.shot = nil }
+                            camera.reset()
+                        } label: {
+                            Label("Retake", systemImage: "arrow.counterclockwise")
+                                .font(.pals(18))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 60)
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(PressableStyle())
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                    }
+
+                    Button {
+                        onPost(shot)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text("Post")
+                            Image(systemName: "paperplane.fill")
+                        }
+                        .font(.pals(20, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 60)
                         .contentShape(Capsule())
-                }
-                .buttonStyle(PressableStyle())
-                .glassEffect(.regular.interactive(), in: .capsule)
-
-                Button {
-                    onPost(shot)
-                    dismiss()
-                } label: {
-                    HStack(spacing: 8) {
-                        Text("Post")
-                        Image(systemName: "paperplane.fill")
                     }
-                    .font(.pals(20, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 60)
-                    .contentShape(Capsule())
+                    .buttonStyle(PressableStyle())
+                    .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
                 }
-                .buttonStyle(PressableStyle())
-                .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
+                Text(left == 0 ? "That was your last try today." : left == 1 ? "1 retake left" : "\(left) retakes left")
+                    .font(.palsBody(14))
+                    .foregroundStyle(.white.opacity(0.6))
             }
             .padding(.horizontal, 20)
         } else if camera.status == .ready {
-            Button(action: shoot) {
-                Circle()
-                    .strokeBorder(.white, lineWidth: 5)
-                    .frame(width: 84, height: 84)
-                    .overlay(Circle().fill(.white).padding(10))
-                    .contentShape(Circle())
+            HStack {
+                // Redo the first photo before taking the selfie (doesn't use a try).
+                Button {
+                    withAnimation(Motion.select) { camera.reset() }
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                }
+                .buttonStyle(PressableStyle())
+                .glassEffect(.regular.interactive(), in: .circle)
+                .opacity(camera.backShot == nil ? 0 : 1)
+                .disabled(camera.backShot == nil)
+                .accessibilityLabel("Retake the first photo")
+                .frame(maxWidth: .infinity)
+
+                Button(action: shoot) {
+                    Circle()
+                        .strokeBorder(.white, lineWidth: 5)
+                        .frame(width: 84, height: 84)
+                        .overlay(Circle().fill(.white).padding(10))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(PressableStyle())
+                .disabled(camera.isCapturing || left == 0)
+                .opacity(camera.isCapturing || left == 0 ? 0.4 : 1)
+                .accessibilityLabel(camera.backShot == nil ? "Take the photo" : "Take the selfie")
+
+                Color.clear.frame(width: 52, height: 52).frame(maxWidth: .infinity)
             }
-            .buttonStyle(PressableStyle())
-            .disabled(camera.isCapturing)
-            .opacity(camera.isCapturing ? 0.4 : 1)
-            .accessibilityLabel("Take your moment")
+            .padding(.horizontal, 20)
         }
     }
 
+    /// First press: back photo, then the camera flips. Second press: the selfie.
     private func shoot() {
         Task {
-            guard let pair = await camera.captureBoth(onEachShot: blink) else { return }
-            withAnimation(Motion.appear) {
-                shot = DualProof(back: pair.back, front: pair.front, author: you, time: .now, isYours: true)
+            if camera.backShot == nil {
+                await camera.captureBack()
+                blink()
+            } else if let back = camera.backShot, let front = await camera.captureFront() {
+                blink()
+                finishTake(DualProof(back: back, front: front, author: you, time: .now, isYours: true))
             }
         }
+    }
+
+    private func finishTake(_ proof: DualProof) {
+        taken += 1
+        onTake()
+        withAnimation(Motion.appear) { shot = proof }
     }
 
     private func blink() {
@@ -273,22 +334,24 @@ final class DualCamera: NSObject {
         use(.back)
     }
 
-    /// Back photo, flip, a beat to let exposure settle, selfie.
-    func captureBoth(onEachShot: @escaping () -> Void) async -> (back: UIImage, front: UIImage)? {
+    /// Takes the back photo, then flips to the front camera for the selfie.
+    func captureBack() async {
+        guard !isCapturing else { return }
+        isCapturing = true
+        defer { isCapturing = false }
+        guard let back = await capture() else { return }
+        shots += 1
+        backShot = back
+        use(.front)
+    }
+
+    func captureFront() async -> UIImage? {
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }
-
-        guard let back = await capture() else { return nil }
-        shots += 1
-        onEachShot()
-        backShot = back
-        use(.front)
-        try? await Task.sleep(for: .milliseconds(700))
         guard let front = await capture() else { return nil }
         shots += 1
-        onEachShot()
-        return (back, front)
+        return front
     }
 
     private func use(_ position: AVCaptureDevice.Position) {

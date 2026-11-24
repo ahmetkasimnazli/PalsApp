@@ -98,7 +98,7 @@ struct TodayCard: View {
 
     private func skippedRow(_ friend: Friend) -> some View {
         HStack(spacing: 12) {
-            PalsAvatar(name: friend.name, color: friend.color, size: 42)
+            PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: 42)
                 .overlay(alignment: .topLeading) {
                     Text("😴")
                         .font(.system(size: 13))
