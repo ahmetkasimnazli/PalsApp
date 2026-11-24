@@ -1,25 +1,33 @@
 import SwiftUI
 
 /// Today's activity: a countdown if it has a timer, otherwise just "Mark as done".
+/// Finishing leads straight into the proof: a back photo plus a selfie. Posting it
+/// unlocks your pals' proofs for the day.
 struct ActivitySessionView: View {
+    let model: HomeModel
     let activity: CircleActivity
-    let streak: Int
-    @Binding var proof: UIImage?
-    var onComplete: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var remaining: Int
     @State private var isRunning = false
-    @State private var isFinished = false
+    @State private var isFinished: Bool
     @State private var showingCamera = false
+    @State private var viewing: DualProof?
+    private let circleID: PalsCircle.ID
 
-    init(activity: CircleActivity, streak: Int, proof: Binding<UIImage?>, onComplete: @escaping () -> Void) {
+    init(model: HomeModel, activity: CircleActivity) {
+        self.model = model
         self.activity = activity
-        self.streak = streak
-        _proof = proof
-        self.onComplete = onComplete
+        circleID = model.selectedCircleID
         _remaining = State(initialValue: (activity.minutes ?? 0) * 60)
+        // Done already but no proof yet: open right at the proof step.
+        _isFinished = State(initialValue: model.isDone(in: model.selectedCircle))
     }
+
+    private var circle: PalsCircle? { model.circle(id: circleID) }
+    private var proof: DualProof? { circle.flatMap(model.myProof(in:)) }
+    private var palsProofs: [DualProof] { circle.map(model.proofs(in:))?.filter { !$0.isYours } ?? [] }
+    private var streak: Int { model.streakDays }
 
     private var duration: Int { (activity.minutes ?? 0) * 60 }
     private var hasTimer: Bool { activity.minutes != nil }
@@ -50,8 +58,8 @@ struct ActivitySessionView: View {
                         .padding(.top, 72)
                     // `streak` is live from the model, so it already includes today.
                     Text(proof == nil
-                         ? "\(streakLine)\nSnap a proof so your circle believes you."
-                         : "\(streakLine)\nProof posted. Your circle can see it.")
+                         ? "\(streakLine)\nNow share your moment: a photo and a selfie. Your pals' moments unlock when you do."
+                         : "\(streakLine)\nMoment shared. Here's what your pals did.")
                         .font(.palsBody(17))
                         .foregroundStyle(Color.palsInk.opacity(0.7))
                         .padding(.top, 16)
@@ -70,8 +78,10 @@ struct ActivitySessionView: View {
 
                 Group {
                     if isFinished, let proof {
-                        ProofPolaroid(image: proof)
+                        postedProofs(proof)
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
+                    } else if isFinished {
+                        lockedPreview
                     } else if hasTimer {
                         timer
                     } else {
@@ -112,11 +122,69 @@ struct ActivitySessionView: View {
         }
         .sensoryFeedback(.success, trigger: isFinished)
         .fullScreenCover(isPresented: $showingCamera) {
-            CameraPicker { image in
-                let small = image.preparingThumbnail(of: image.size.fitting(maxSide: 1200)) ?? image
-                withAnimation(Motion.celebrate) { proof = small }
+            DualCameraView(activity: activity, you: UserDefaults.standard.string(forKey: "profileName") ?? "You") { proof in
+                withAnimation(Motion.celebrate) { model.postProof(proof, in: circleID) }
             }
-            .ignoresSafeArea()
+        }
+        .fullScreenCover(item: $viewing) { proof in
+            ProofViewer(proofs: circle.map(model.proofs(in:)) ?? [], startAt: proof.id)
+        }
+    }
+
+    /// Your proof, and your pals' proofs now that they're unlocked.
+    private func postedProofs(_ proof: DualProof) -> some View {
+        VStack(spacing: 18) {
+            Button { viewing = proof } label: {
+                DualProofView(proof: proof, cornerRadius: 22, interactive: false)
+                    .frame(width: palsProofs.isEmpty ? 240 : 190)
+                    .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
+                    .rotationEffect(.degrees(-3))
+            }
+            .buttonStyle(PressableStyle())
+
+            if !palsProofs.isEmpty {
+                HStack(spacing: -14) {
+                    ForEach(Array(palsProofs.prefix(4).enumerated()), id: \.element.id) { index, pal in
+                        Button { viewing = pal } label: {
+                            DualProofView(proof: pal, cornerRadius: 12, insetShare: 0.34, interactive: false)
+                                .frame(width: 74)
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(Color.palsOffWhite, lineWidth: 3))
+                                .rotationEffect(.degrees(index.isMultiple(of: 2) ? -5 : 5))
+                        }
+                        .buttonStyle(PressableStyle())
+                        .accessibilityLabel("\(pal.author)'s moment")
+                    }
+                }
+                Text(palsProofs.count == 1 ? "1 pal's moment unlocked" : "\(palsProofs.count) pals' moments unlocked")
+                    .font(.pals(15))
+                    .foregroundStyle(Color.palsInk.opacity(0.6))
+            }
+        }
+    }
+
+    /// Before you post: your pals' proofs, blurred. Nobody posted yet → the done badge.
+    @ViewBuilder
+    private var lockedPreview: some View {
+        if palsProofs.isEmpty {
+            badge
+        } else {
+            VStack(spacing: 14) {
+                HStack(spacing: -18) {
+                    ForEach(Array(palsProofs.prefix(3).enumerated()), id: \.element.id) { index, pal in
+                        DualProofView(proof: pal, cornerRadius: 16, interactive: false)
+                            .frame(width: 110)
+                            .blur(radius: 10)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .rotationEffect(.degrees(Double(index - 1) * 6))
+                    }
+                }
+                .overlay { Text("🔒").font(.system(size: 44)) }
+                .accessibilityHidden(true)
+                Text(palsProofs.count == 1 ? "1 pal already posted" : "\(palsProofs.count) pals already posted")
+                    .font(.pals(17))
+                    .foregroundStyle(Color.palsInk.opacity(0.6))
+            }
         }
     }
 
@@ -170,11 +238,11 @@ struct ActivitySessionView: View {
         if isFinished {
             VStack(spacing: 14) {
                 if proof == nil {
-                    primaryButton("Snap proof", systemImage: "camera.fill") { showingCamera = true }
-                    secondaryButton("Skip, back to my orbit") { dismiss() }
+                    primaryButton("Snap my moment", systemImage: "camera.fill") { showingCamera = true }
+                    secondaryButton("Later") { dismiss() }
                 } else {
                     primaryButton("Back to my orbit", systemImage: "arrow.right") { dismiss() }
-                    secondaryButton("Retake photo") { showingCamera = true }
+                    secondaryButton("Retake moment") { showingCamera = true }
                 }
             }
         } else if !hasTimer {
@@ -229,53 +297,15 @@ struct ActivitySessionView: View {
     private func finish() {
         isRunning = false
         withAnimation(Motion.celebrate) { isFinished = true }
-        onComplete()
-    }
-}
-
-/// The proof photo shown as a tilted polaroid with a lime "PROOF" sticker.
-struct ProofPolaroid: View {
-    let image: UIImage
-    var width: CGFloat = 250
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: width - 24, height: width - 24)
-                .clipped()
-            Text("Today ✓")
-                .font(.pals(width * 0.08))
-                .foregroundStyle(Color.palsInk)
-                .frame(height: width * 0.18)
+        model.completeTodayActivity(in: circleID)
+        // Straight on to the proof, while the moment's still there.
+        Task {
+            try? await Task.sleep(for: .milliseconds(700))
+            showingCamera = true
         }
-        .padding([.horizontal, .top], 12)
-        .background(.white)
-        .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
-        .overlay(alignment: .topTrailing) {
-            Text("PROOF")
-                .font(.pals(width * 0.075))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.palsPink)
-                .rotationEffect(.degrees(12))
-                .offset(x: 14, y: -10)
-        }
-        .rotationEffect(.degrees(-4))
-        .accessibilityElement()
-        .accessibilityLabel("Your proof photo for today")
-    }
-}
-
-private extension CGSize {
-    func fitting(maxSide: CGFloat) -> CGSize {
-        let ratio = min(1, maxSide / Swift.max(width, height))
-        return CGSize(width: width * ratio, height: height * ratio)
     }
 }
 
 #Preview {
-    ActivitySessionView(activity: CircleActivity.suggestions[0], streak: 12, proof: .constant(nil), onComplete: {})
+    ActivitySessionView(model: HomeModel(), activity: CircleActivity.suggestions[0])
 }

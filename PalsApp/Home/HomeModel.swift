@@ -155,8 +155,10 @@ final class HomeModel {
     var activeActivity: CircleActivity?
     /// A prank waiting to be played on screen.
     var incomingPrank: IncomingPrank?
-    /// Photo you snapped when finishing today's activity (demo: kept in memory).
-    var proofPhoto: UIImage?
+    /// Your proof for today, per circle. Posting one unlocks that circle's proofs.
+    private(set) var myProofs: [PalsCircle.ID: DualProof] = [:]
+    /// Demo proofs for pals who are done today, until they come from a backend.
+    @ObservationIgnored private var palProofs: [Friend.ID: DualProof] = [:]
 
     private(set) var streakDays: Int
     private(set) var freezes: Int = 2
@@ -218,6 +220,7 @@ final class HomeModel {
         if streakDays == 0 && lastCompleted == nil { streakDays = 12 } // demo value for the first run
         restoreDoneCircles()
         revealedCircles = restore(Self.revealedKey)
+        restoreProofs()
 
         // Demo: until there's a backend, a pal "pranks" you whenever you open the app
         // without having done today's activity.
@@ -376,11 +379,46 @@ final class HomeModel {
         )
     }
 
+    // MARK: - Proofs
+
+    func myProof(in circle: PalsCircle) -> DualProof? { myProofs[circle.id] }
+
+    /// Everyone's proof for today in this circle: yours first, then the newest.
+    func proofs(in circle: PalsCircle) -> [DualProof] {
+        let pals = circle.friends.filter(\.doneToday).compactMap { palProofs[$0.id] }
+            .sorted { $0.time > $1.time }
+        return (myProofs[circle.id].map { [$0] } ?? []) + pals
+    }
+
+    /// Posting a proof also counts as doing today's activity.
+    func postProof(_ proof: DualProof, in circleID: PalsCircle.ID? = nil) {
+        let circleID = circleID ?? selectedCircleID
+        guard let circle = circle(id: circleID) else { return }
+        myProofs[circleID] = proof
+        ProofStore.save(proof, circle: circle.name)
+        if !isDone(in: circle) { completeTodayActivity(in: circleID) }
+    }
+
+    private func restoreProofs() {
+        let me = defaults.string(forKey: "profileName") ?? "You"
+        for circle in circles {
+            if let proof = ProofStore.load(circle: circle.name, author: me) {
+                myProofs[circle.id] = proof
+            }
+            for (index, friend) in circle.friends.filter(\.doneToday).enumerated() {
+                palProofs[friend.id] = DemoProofArt.make(for: circle.today, author: friend.name,
+                                                         color: friend.color, minutesAgo: 25 + index * 47,
+                                                         variant: [2, 3, 1][index % 3])
+            }
+        }
+    }
+
     // MARK: - Demo helpers
 
     /// Undo today's activity and sent pranks so the flow can be shown again.
     func resetToday() {
-        proofPhoto = nil
+        for circle in circles { ProofStore.delete(circle: circle.name) }
+        myProofs = [:]
         doneCircles = []
         saveDoneCircles()
         revealedCircles = []

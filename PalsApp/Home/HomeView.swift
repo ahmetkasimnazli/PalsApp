@@ -7,25 +7,74 @@ struct HomeView: View {
     var onViewCircle: (PalsCircle.ID) -> Void = { _ in }
 
     @State private var prankTarget: Friend?
+    @State private var viewingProof: DualProof?
+    /// Which top-bar stat has its details open.
+    @State private var openStat: String?
 
     var body: some View {
         NavigationStack {
             content
-                // The title row lives in the page so the switch button can sit right next to it.
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            // Demo: stands in for a push from a pal until there's a backend.
-                            model.receiveDemoPrank()
-                        } label: {
-                            Image(systemName: "bell.badge")
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(Color.palsPink, .white)
-                        }
-                        .accessibilityLabel("Notifications")
-                    }
-                }
+                .toolbar(.hidden, for: .navigationBar)
+                // Fixed stats row across the top, Duolingo-style: it stays put while the page scrolls.
+                .safeAreaInset(edge: .top, spacing: 0) { statsBar }
+        }
+    }
+
+    /// 🔥 streak and ❄️ freezes side by side on the left, a glass 🔔 on the right.
+    private var statsBar: some View {
+        HStack(spacing: 18) {
+            stat("🔥", value: model.streakDays,
+                 // Grey until today's activity is done; Duolingo orange once it is.
+                 color: model.completedToday ? Color(hex: 0xFF9600) : .white.opacity(0.55),
+                 lit: model.completedToday,
+                 label: "\(model.streakDays) day streak")
+
+            stat("❄️", value: model.freezes, color: Color(hex: 0x7DD3FC), lit: true,
+                 label: "\(model.freezes) streak freezes")
+
+            Spacer(minLength: 0)
+
+            Button {
+                // Demo: stands in for a push from a pal until there's a backend.
+                model.receiveDemoPrank()
+            } label: {
+                Image(systemName: "bell.badge.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Color.palsPink, .white)
+                    .font(.system(size: 19))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(PressableStyle())
+            .glassEffect(.regular.interactive(), in: .circle)
+            .accessibilityLabel("Notifications")
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 6)
+        .background(Color.palsIndigo)
+    }
+
+    private func stat(_ emoji: String, value: Int, color: Color, lit: Bool, label: String) -> some View {
+        Button { openStat = emoji } label: {
+            HStack(spacing: 6) {
+                Text(emoji)
+                    .font(.system(size: 24))
+                    .saturation(lit ? 1 : 0)
+                Text("\(value)")
+                    .font(.pals(21, weight: .bold))
+                    .foregroundStyle(color)
+                    .contentTransition(.numericText())
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel(label)
+        .accessibilityHint("Shows your streak")
+        .popover(isPresented: Binding(get: { openStat == emoji }, set: { if !$0 { openStat = nil } }),
+                 arrowEdge: .top) {
+            StreakPopover(streak: model.streakDays, freezes: model.freezes, doneToday: model.completedToday)
+                .presentationCompactAdaptation(.popover)
         }
     }
 
@@ -41,13 +90,19 @@ struct HomeView: View {
                     streak: model.streakDays,
                     progress: model.circleProgress,
                     friends: model.selectedCircle.friends,
-                    onFriendTap: { prankTarget = $0 }
+                    onFriendTap: tapped
                 )
                 .frame(height: 300)
                 .padding(.horizontal, -8)
 
                 DailyCardView(model: model)
                     .padding(.top, 6)
+
+                ProofStrip(model: model, circle: model.selectedCircle, onDark: true) {
+                    model.startActivity()
+                }
+                .padding(.top, 18)
+                .padding(.bottom, 14)
 
                 TodayCard(
                     circle: model.selectedCircle,
@@ -56,15 +111,15 @@ struct HomeView: View {
                     onViewAll: { onViewCircle(model.selectedCircleID) }
                 )
                 .padding(.top, 4)
-
-                streakCard
-                    .padding(.top, 14)
-                    .padding(.bottom, 24)
+                .padding(.bottom, 24)
             }
             .padding(.horizontal, 20)
         }
         .scrollIndicators(.hidden)
         .background(Color.palsIndigo.ignoresSafeArea())
+        .fullScreenCover(item: $viewingProof) { proof in
+            ProofViewer(proofs: model.proofs(in: model.selectedCircle), startAt: proof.id)
+        }
         .sheet(item: $prankTarget) { friend in
             PrankSheet(
                 friend: model.friend(id: friend.id) ?? friend,
@@ -86,6 +141,17 @@ struct HomeView: View {
                 }
             )
             .preferredColorScheme(.light)
+        }
+    }
+
+    /// A pal who posted a proof opens it (once yours is posted); anyone else opens the prank sheet.
+    private func tapped(_ friend: Friend) {
+        let circle = model.selectedCircle
+        if model.myProof(in: circle) != nil,
+           let proof = model.proofs(in: circle).first(where: { !$0.isYours && $0.author == friend.name }) {
+            viewingProof = proof
+        } else {
+            prankTarget = friend
         }
     }
 
@@ -125,43 +191,50 @@ struct HomeView: View {
         }
     }
 
-    private var streakCard: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("YOUR STREAK")
-                    .font(.pals(14))
-                    .tracking(1)
-                    .foregroundStyle(.white.opacity(0.7))
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(model.streakDays == 1 ? "1 day" : "\(model.streakDays) days")
-                        .font(.palsDisplay(40))
-                        .tracking(-1)
-                        .contentTransition(.numericText())
-                    Text("🔥")
-                        .font(.system(size: 30))
-                }
-                .foregroundStyle(Color.palsOffWhite)
-            }
-
-            Spacer()
-
-            HStack(spacing: 6) {
-                Image(systemName: "snowflake")
-                Text("\(model.freezes) freezes")
-            }
-            .font(.pals(15))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.white.opacity(0.18), in: Capsule())
-        }
-        .padding(20)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
-        .accessibilityElement(children: .combine)
-    }
-
 }
 
 #Preview {
     HomeView(model: HomeModel(), name: "Ahmet", photo: nil)
+}
+
+/// What the 🔥 in the top bar opens.
+private struct StreakPopover: View {
+    let streak: Int
+    let freezes: Int
+    let doneToday: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("🔥")
+                    .font(.system(size: 34))
+                    .saturation(doneToday ? 1 : 0)
+                Text(streak == 1 ? "1 day" : "\(streak) days")
+                    .font(.palsDisplay(36))
+                    .tracking(-1)
+            }
+            Text(doneToday ? "Done today. Your streak is safe 🙌"
+                           : "Do today's activity to keep it going.")
+                .font(.palsBody(15))
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            HStack(spacing: 10) {
+                Text("❄️")
+                    .font(.system(size: 22))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(freezes == 1 ? "1 freeze" : "\(freezes) freezes")
+                        .font(.pals(16))
+                    Text("Saves your streak on a day you miss.")
+                        .font(.palsBody(13))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .foregroundStyle(.primary)
+        .padding(20)
+        .frame(width: 280, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
 }

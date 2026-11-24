@@ -193,6 +193,14 @@ private struct CircleDetailView: View {
                     activityCard(circle)
                         .padding(.top, 18)
 
+                    ProofStrip(model: model, circle: circle) {
+                        model.selectedCircleID = circle.id
+                        // The card draw happens on the Orbit.
+                        if !model.isRevealed(circle) { onOpenOrbit() }
+                        model.startActivity()
+                    }
+                    .padding(.top, 26)
+
                     activitiesSection(circle)
 
                     Text("PALS")
@@ -340,14 +348,14 @@ private struct CircleDetailView: View {
                 .font(.pals(18))
                 .foregroundStyle(Color.palsInk)
             Spacer()
-            if let proof = model.proofPhoto {
-                Image(uiImage: proof)
+            if let circle, let proof = model.myProof(in: circle) {
+                Image(uiImage: proof.back)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 38, height: 38)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .rotationEffect(.degrees(-6))
-                    .accessibilityLabel("Your proof photo")
+                    .accessibilityLabel("Your moment")
             }
             if let circle {
                 statusPill(model.isDone(in: circle) ? "Done ✓" : "Not yet", done: model.isDone(in: circle))

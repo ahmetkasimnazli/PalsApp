@@ -51,9 +51,7 @@ struct MainTabView: View {
                 }
             }
             .sheet(item: $model.activeActivity) { activity in
-                ActivitySessionView(activity: activity, streak: model.streakDays, proof: $model.proofPhoto) {
-                    withAnimation { model.completeTodayActivity() }
-                }
+                ActivitySessionView(model: model, activity: activity)
                 .preferredColorScheme(.light)
             }
             .tint(tab == .orbit ? .white : .palsBlue)

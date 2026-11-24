@@ -39,7 +39,7 @@
         "DEVELOPMENT_TEAM": "6FB57B7PGZ",
         "ENABLE_PREVIEWS": "YES",
         "GENERATE_INFOPLIST_FILE": "YES",
-        "INFOPLIST_KEY_NSCameraUsageDescription": "Pals uses the camera so you can snap a quick proof photo when you finish today's activity.",
+        "INFOPLIST_KEY_NSCameraUsageDescription": "Pals uses the camera to snap your moment: a quick photo and a selfie when you finish today's activity.",
         "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
         "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
         "INFOPLIST_KEY_UILaunchStoryboardName": "LaunchScreen",
