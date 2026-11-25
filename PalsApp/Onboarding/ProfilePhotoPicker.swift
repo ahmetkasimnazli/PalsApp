@@ -1,7 +1,7 @@
 import PhotosUI
 import SwiftUI
 
-/// Big round avatar: tap to pick a photo from the library or use one of your Memoji. Shows the
+/// Big round avatar: tap to take a selfie, or pick a photo or one of your Memoji. Shows the
 /// photo, or your initial (live, as you type your name) so you see exactly what your pals will see.
 struct ProfilePhotoPicker: View {
     @Binding var photo: UIImage?
@@ -15,6 +15,7 @@ struct ProfilePhotoPicker: View {
     @State private var selection: PhotosPickerItem?
     @State private var isLoading = false
     @State private var pickingPhoto = false
+    @State private var takingSelfie = false
     @State private var pickingMemoji = false
 
     private var ring: CGFloat { max(4, size * 0.05) }
@@ -24,14 +25,16 @@ struct ProfilePhotoPicker: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Menu {
-                Button { pickingPhoto = true } label: { Label("Choose a photo", systemImage: "photo.on.rectangle") }
-                Button { pickingMemoji = true } label: { Label("Use my Memoji", systemImage: "face.smiling") }
-            } label: {
-                avatar
-            }
-            .buttonStyle(PressableStyle())
-            .accessibilityLabel(photo == nil ? "Add profile photo or Memoji" : "Change profile photo")
+            // Tap: straight to the selfie camera. Hold: the other ways in.
+            Button { takingSelfie = true } label: { avatar }
+                .buttonStyle(PressableStyle())
+                .contextMenu {
+                    Button { takingSelfie = true } label: { Label("Take a selfie", systemImage: "camera") }
+                    Button { pickingPhoto = true } label: { Label("Choose a photo", systemImage: "photo.on.rectangle") }
+                    Button { pickingMemoji = true } label: { Label("Use my Memoji", systemImage: "face.smiling") }
+                }
+                .accessibilityLabel(photo == nil ? "Take a profile photo" : "Retake your profile photo")
+                .accessibilityHint("Opens the camera")
 
             if showsOptions {
                 // Two drops of glass melted into one: the container's spacing is wider than the
@@ -44,6 +47,13 @@ struct ProfilePhotoPicker: View {
                 }
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
+        }
+        .fullScreenCover(isPresented: $takingSelfie) {
+            CameraPicker { image in
+                let resized = image.preparingThumbnail(of: image.size.fitting(maxSide: 1024)) ?? image
+                withAnimation(Motion.appear) { photo = resized }
+            }
+            .ignoresSafeArea()
         }
         .photosPicker(isPresented: $pickingPhoto, selection: $selection, matching: .images, photoLibrary: .shared())
         .sheet(isPresented: $pickingMemoji) {
@@ -92,7 +102,7 @@ struct ProfilePhotoPicker: View {
         .padding(ring)
         .glassEffect(.regular, in: .circle)
         .overlay(alignment: .bottomTrailing) {
-            Image(systemName: photo == nil ? "plus" : "pencil")
+            Image(systemName: "camera.fill")
                 .font(.system(size: size * 0.11, weight: .bold))
                 .foregroundStyle(Color.palsIndigo)
                 .frame(width: size * 0.28, height: size * 0.28)

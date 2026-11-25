@@ -1,4 +1,5 @@
 import AVFoundation
+import AVKit
 import SwiftUI
 
 /// Full-screen moment camera, in two unhurried steps: first the back camera (what you're
@@ -58,6 +59,16 @@ struct DualCameraView: View {
         .task { await camera.start() }
         .onDisappear { camera.stop() }
         .sensoryFeedback(.impact(weight: .medium), trigger: camera.shots)
+        // Volume up/down (and Camera Control) take the photo, like the Camera app. While this is
+        // on, the buttons don't change the volume.
+        .onCameraCaptureEvent(isEnabled: canShoot) { event in
+            if event.phase == .ended { shoot() }
+        }
+    }
+
+    /// The shutter can fire: the camera is live, nothing is being captured or reviewed, a try is left.
+    private var canShoot: Bool {
+        shot == nil && camera.status == .ready && !camera.isCapturing && left > 0
     }
 
     private var header: some View {
@@ -244,8 +255,8 @@ struct DualCameraView: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(PressableStyle())
-                .disabled(camera.isCapturing || left == 0)
-                .opacity(camera.isCapturing || left == 0 ? 0.4 : 1)
+                .disabled(!canShoot)
+                .opacity(canShoot ? 1 : 0.4)
                 .accessibilityLabel(camera.backShot == nil ? "Take the photo" : "Take the selfie")
 
                 Color.clear.frame(width: 52, height: 52).frame(maxWidth: .infinity)
@@ -256,6 +267,7 @@ struct DualCameraView: View {
 
     /// First press: back photo, then the camera flips. Second press: the selfie.
     private func shoot() {
+        guard canShoot else { return }
         Task {
             if camera.backShot == nil {
                 await camera.captureBack()
