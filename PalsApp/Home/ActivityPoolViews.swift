@@ -30,8 +30,6 @@ struct AddActivitySheet: View {
     }
     private var canSave: Bool { !trimmed.isEmpty && !unchanged }
 
-    private let emojis = ["✨", "🚶", "🏃", "📚", "🧘", "💪", "🤸", "🧎", "💧", "🥗", "🎸", "📵", "😴", "🧹"]
-    private let timers: [Int?] = [nil, 1, 5, 10, 15, 30]
 
     private var trimmed: String { title.trimmingCharacters(in: .whitespaces) }
 
@@ -84,41 +82,11 @@ struct AddActivitySheet: View {
                 }
 
                 section("Emoji") {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 8) {
-                            ForEach(emojis, id: \.self) { e in
-                                Button { emoji = e } label: {
-                                    Text(e)
-                                        .font(.system(size: 24))
-                                        .frame(width: 42, height: 42)
-                                        .background(.white, in: Circle())
-                                        .overlay(Circle().strokeBorder(Color.palsBlue, lineWidth: e == emoji ? 2.5 : 0))
-                                }
-                                .buttonStyle(PressableStyle())
-                                .accessibilityAddTraits(e == emoji ? .isSelected : [])
-                            }
-                        }
-                        .padding(2)
-                    }
-                    .scrollIndicators(.hidden)
+                    EmojiField(emoji: $emoji)
                 }
 
                 section("Timer") {
-                    FlowLayout(spacing: 8) {
-                        ForEach(timers, id: \.self) { value in
-                            let selected = value == minutes
-                            Button { minutes = value } label: {
-                                Text(value.map { "\($0) min" } ?? "No timer")
-                                    .font(.pals(14))
-                                    .foregroundStyle(selected ? .white : Color.palsInk)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 9)
-                                    .background(selected ? Color.palsBlue : .white, in: Capsule())
-                            }
-                            .buttonStyle(PressableStyle())
-                            .accessibilityAddTraits(selected ? .isSelected : [])
-                        }
-                    }
+                    TimerDial(minutes: $minutes)
                 }
 
                 Text(isEditing
@@ -144,6 +112,7 @@ struct AddActivitySheet: View {
             .padding(24)
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .presentationBackground(Color.palsOffWhite)
     }
 
