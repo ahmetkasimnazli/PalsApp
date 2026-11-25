@@ -1,18 +1,22 @@
 import SwiftUI
 
 /// Today's activity as a card drawn from the circle's deck. Until you draw it, it's a face-down
-/// pile; tap it and the deck shuffles, then the top card flips over. It stays face up for the day.
+/// pile; tap it and the deck gets riffle-shuffled, then the top card flips over. It stays face up for the day.
 struct DailyCardView: View {
     @Bindable var model: HomeModel
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// 0 shows the back, 180 the face.
     @State private var angle: Double = 0
-    @State private var fanned = false
     @State private var drawing = false
     @State private var lifted = false
     @State private var shuffleTicks = 0
     @State private var revealTicks = 0
+    /// The face-down cards under today's card, which get shuffled.
+    @State private var deck = DeckCard.squared
+    /// The whole deck shrinks a little while it's being shuffled, so both halves fit on screen.
+    @State private var shuffling = false
+    @State private var width: CGFloat = 350
 
     private var circle: PalsCircle { model.selectedCircle }
     private var revealed: Bool { model.isRevealed(circle) }
@@ -21,13 +25,14 @@ struct DailyCardView: View {
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
-                // The rest of the deck, peeking out behind.
-                ForEach(0..<2, id: \.self) { i in
-                    CardBack()
+                // The rest of the deck, peeking out behind (and shuffled on a draw).
+                ForEach(deck) { card in
+                    CardBack(showsPrompt: false)
                         .frame(height: Self.height)
-                        .scaleEffect(i == 0 ? 0.9 : 0.95)
-                        .rotationEffect(.degrees(fanned ? (i == 0 ? -11 : 9) : (i == 0 ? -3 : 2)))
-                        .offset(x: fanned ? (i == 0 ? -46 : 46) : 0, y: fanned ? 6 : (i == 0 ? 18 : 9))
+                        .scaleEffect(card.scale)
+                        .rotationEffect(.degrees(card.angle))
+                        .offset(x: card.x * width, y: card.y)
+                        .zIndex(card.z)
                         .brightness(revealed ? -0.12 : 0)
                 }
 
@@ -49,7 +54,12 @@ struct DailyCardView: View {
                 .buttonStyle(PressableStyle())
                 .scaleEffect(lifted ? 1.04 : 1)
                 .offset(y: lifted ? -8 : 0)
+                // While the deck is shuffled, today's card is one of the shuffled cards.
+                .opacity(shuffling ? 0 : 1)
+                .zIndex(1000)
             }
+            .scaleEffect(shuffling ? 0.74 : 1)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .padding(.bottom, 14)
 
             if !revealed {
@@ -65,7 +75,8 @@ struct DailyCardView: View {
         .onChange(of: model.selectedCircleID) {
             // Another circle's deck: show it as it is, no animation.
             angle = revealed ? 180 : 0
-            fanned = false
+            deck = DeckCard.squared
+            shuffling = false
             lifted = false
         }
         .onChange(of: model.drawRequests) { draw() }
@@ -81,15 +92,7 @@ struct DailyCardView: View {
         let drawnCircle = circle
         Task {
             if !reduceMotion {
-                // Shuffle: the deck fans out and snaps back together, twice.
-                for _ in 0..<2 {
-                    withAnimation(Motion.shuffle) { fanned = true }
-                    shuffleTicks += 1
-                    try? await Task.sleep(for: .milliseconds(230))
-                    withAnimation(Motion.shuffle) { fanned = false }
-                    shuffleTicks += 1
-                    try? await Task.sleep(for: .milliseconds(230))
-                }
+                await riffle()
                 withAnimation(Motion.select) { lifted = true }
                 try? await Task.sleep(for: .milliseconds(180))
                 withAnimation(Motion.flip) { angle = 180 }
@@ -102,6 +105,101 @@ struct DailyCardView: View {
             model.reveal(drawnCircle)
             drawing = false
         }
+    }
+
+    /// A riffle shuffle, twice: cut the deck into two halves, then let the cards fall back
+    /// into one pile, alternating sides, one at a time. Then square it up.
+    private func riffle() async {
+        withAnimation(Motion.select) { shuffling = true }
+        try? await Task.sleep(for: .milliseconds(120))
+
+        var top = Double(deck.count)
+        for round in 0..<2 {
+            // Cut: the bottom half goes left, the top half goes right.
+            let order = deck.indices.sorted { deck[$0].z < deck[$1].z }
+            let half = order.count / 2
+            let left = Array(order[..<half]), right = Array(order[half...])
+            withAnimation(Motion.shuffle) {
+                for (n, i) in left.enumerated() { deck[i].place(side: -1, height: n) }
+                for (n, i) in right.enumerated() { deck[i].place(side: 1, height: n) }
+            }
+            shuffleTicks += 1
+            try? await Task.sleep(for: .milliseconds(round == 0 ? 260 : 200))
+
+            // Riffle: the top card of each half drops onto the middle pile, taking turns.
+            var piles = [left, right].map { Array($0.reversed()) }
+            var side = round % 2
+            var landed = 0
+            while !piles[0].isEmpty || !piles[1].isEmpty {
+                if piles[side].isEmpty { side = 1 - side }
+                let i = piles[side].removeFirst()
+                top += 1
+                withAnimation(.spring(duration: 0.18, bounce: 0.1)) {
+                    deck[i].land(height: landed, z: top)
+                }
+                landed += 1
+                shuffleTicks += 1
+                side = 1 - side
+                try? await Task.sleep(for: .milliseconds(round == 0 ? 55 : 45))
+            }
+            try? await Task.sleep(for: .milliseconds(120))
+        }
+
+        // Square up: tap the deck straight, then grow back to size.
+        withAnimation(Motion.select) {
+            let order = deck.indices.sorted { deck[$0].z < deck[$1].z }
+            for (n, i) in order.enumerated() { deck[i].square(position: n) }
+            shuffling = false
+        }
+        shuffleTicks += 1
+        try? await Task.sleep(for: .milliseconds(260))
+    }
+}
+
+// MARK: - Deck
+
+/// One face-down card in the deck under today's card. `x` is a share of the card's width.
+private struct DeckCard: Identifiable {
+    let id: Int
+    var x: CGFloat = 0
+    var y: CGFloat = 0
+    var angle: Double = 0
+    var scale: CGFloat = 1
+    var z: Double
+
+    static let count = 6
+    /// A little tilt per card, so the pile looks hand-stacked rather than perfect.
+    private static let tilt: [Double] = [-3, 2, -1.5, 2.5, -2, 1]
+
+    /// The resting deck: a pile peeking out under today's card.
+    static var squared: [DeckCard] {
+        (0..<count).map { var card = DeckCard(id: $0, z: Double($0)); card.square(position: $0); return card }
+    }
+
+    /// Resting in the pile; `position` 0 is the bottom.
+    mutating func square(position: Int) {
+        let fromTop = CGFloat(Self.count - position)
+        x = 0
+        y = fromTop * 3.5
+        angle = Self.tilt[position % Self.tilt.count]
+        scale = 1 - fromTop * 0.015
+    }
+
+    /// In one half of a cut deck. `side` is -1 (left) or 1 (right); `height` counts up the half.
+    mutating func place(side: CGFloat, height: Int) {
+        x = side * 0.23
+        y = 6 - CGFloat(height) * 2.5
+        angle = Double(side) * 7 + Double(height) * 0.4 * Double(side)
+        scale = 1
+    }
+
+    /// Dropped onto the middle pile during the riffle.
+    mutating func land(height: Int, z: Double) {
+        x = (id.isMultiple(of: 2) ? -1 : 1) * 0.012
+        y = 4 - CGFloat(height) * 1.5
+        angle = Self.tilt[id % Self.tilt.count] * 0.6
+        scale = 1
+        self.z = z
     }
 }
 
