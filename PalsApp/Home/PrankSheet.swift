@@ -10,62 +10,63 @@ struct PrankSheet: View {
     @State private var selected: PrankKind = .slap
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: 56)
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.palsInk)
-                        .frame(width: 44, height: 44)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: 56)
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(Color.palsInk)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(PressableStyle())
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Close")
                 }
-                .buttonStyle(PressableStyle())
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Close")
-            }
 
-            if friend.doneToday {
-                HighlightHeadline(lines: [friend.name], highlight: "did it today", size: 44)
-                Text("No prank needed. Respect. 💪")
-                    .font(.palsBody(17))
-                    .foregroundStyle(Color.palsInk.opacity(0.7))
-            } else if let sent = friend.prankedToday {
-                HighlightHeadline(lines: [friend.name], highlight: "got \(sent.pastTense) \(sent.emoji)", size: 44)
-                Text("One prank a day. They'll get it the next time they open Pals.")
-                    .font(.palsBody(17))
-                    .foregroundStyle(Color.palsInk.opacity(0.7))
-            } else {
-                pickPrank
-            }
+                if friend.doneToday {
+                    HighlightHeadline(lines: [friend.name], highlight: "did it today", size: 44)
+                    Text("No prank needed. Respect. 💪")
+                        .font(.palsBody(17))
+                        .foregroundStyle(Color.palsInk.opacity(0.7))
+                } else if let sent = friend.prankedToday {
+                    HighlightHeadline(lines: [friend.name], highlight: "got \(sent.pastTense) \(sent.emoji)", size: 44)
+                    Text("One prank a day. They'll get it the next time they open Pals.")
+                        .font(.palsBody(17))
+                        .foregroundStyle(Color.palsInk.opacity(0.7))
+                } else {
+                    HighlightHeadline(lines: ["\(friend.name) skipped"], highlight: "Prank them", size: 42)
 
-            Spacer(minLength: 0)
+                    Text("Pick a card. It plays on their screen the next time they open Pals.")
+                        .font(.palsBody(16))
+                        .foregroundStyle(Color.palsInk.opacity(0.7))
+
+                    // Edge to edge, so the side cards peek in from the sheet's edges.
+                    PrankPicker(selected: $selected)
+                        .padding(.horizontal, -24)
+                        .padding(.top, 4)
+                }
+            }
+            .padding(24)
         }
-        .padding(24)
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom) {
+            if canPrank { sendBar }
+        }
         .presentationDetents([.large])
         .presentationBackground(Color.palsOffWhite)
     }
 
-    private var pickPrank: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HighlightHeadline(lines: ["\(friend.name) skipped"], highlight: "Prank them", size: 42)
+    private var canPrank: Bool { !friend.doneToday && friend.prankedToday == nil }
 
-            Text("They haven't done today's activity yet. Pick a card — it plays on their screen the next time they open Pals.")
-                .font(.palsBody(16))
-                .foregroundStyle(Color.palsInk.opacity(0.7))
-
-            PrankFan(selected: $selected, target: friend)
-                .padding(.top, 4)
-
-            Text(selected.pitch)
-                .font(.palsBody(15))
-                .foregroundStyle(Color.palsInk.opacity(0.7))
-                .frame(maxWidth: .infinity)
-                .multilineTextAlignment(.center)
-                .contentTransition(.opacity)
-
+    /// Send (and try it on yourself), always in reach at the bottom.
+    private var sendBar: some View {
+        VStack(spacing: 6) {
             Button {
                 onSend(selected)
                 dismiss()
@@ -78,10 +79,10 @@ struct PrankSheet: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, minHeight: 60)
                 .contentShape(Capsule())
+                .contentTransition(.opacity)
             }
             .buttonStyle(PressableStyle())
-            .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
-            .padding(.top, 8)
+            .glassEffect(.regular.tint(selected.cardColor).interactive(), in: .capsule)
 
             Button {
                 onPreview(selected)
@@ -89,45 +90,14 @@ struct PrankSheet: View {
                 Text("Try it on me first")
                     .font(.pals(17))
                     .foregroundStyle(Color.palsInk)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(PressableStyle())
         }
-    }
-
-    private func option(_ kind: PrankKind) -> some View {
-        let isSelected = kind == selected
-        return Button {
-            withAnimation(Motion.select) { selected = kind }
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(kind.emoji)
-                    .font(.system(size: 40))
-                    .rotationEffect(.degrees(isSelected ? -10 : 0))
-                Text(kind.title)
-                    .font(.palsDisplay(20))
-                    .foregroundStyle(Color.palsInk)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                Text(kind.pitch)
-                    .font(.palsBody(13))
-                    .foregroundStyle(Color.palsInk.opacity(0.65))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(isSelected ? Color.palsBlue.opacity(0.1) : .white)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(isSelected ? Color.palsBlue : Color.palsInk.opacity(0.1), lineWidth: isSelected ? 2.5 : 1)
-            )
-            .scaleEffect(isSelected ? 1 : 0.97)
-        }
-        .buttonStyle(PressableStyle())
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+        .background(Color.palsOffWhite)
     }
 }
 

@@ -236,64 +236,127 @@ struct CategoryBlob: View {
     }
 }
 
-// MARK: - Prank fan
+// MARK: - Prank picker
 
-/// The pranks as a fan of cards; tap one (or swipe) to pull it to the front.
-struct PrankFan: View {
+/// The pranks as a row of trading cards: the picked one stands upright in the middle, its
+/// neighbours lean away behind it. Swipe to move one card at a time, or tap a side card to pick it.
+struct PrankPicker: View {
     @Binding var selected: PrankKind
-    let target: Friend
 
-    private var kinds: [PrankKind] { PrankKind.allCases }
-    private var selectedIndex: Int { kinds.firstIndex(of: selected) ?? 0 }
+    /// How far the row is being dragged, in cards (positive = towards the next card).
+    @State private var drag: CGFloat = 0
+    @State private var width: CGFloat = 400
+
+    private let kinds = PrankKind.allCases
+    private var index: Int { kinds.firstIndex(of: selected) ?? 0 }
+    private var cardWidth: CGFloat { width * 0.54 }
+    /// Distance between neighbouring cards' centres.
+    private var spacing: CGFloat { cardWidth * 0.8 }
 
     var body: some View {
-        ZStack {
-            // A fixed fan centred on the screen; the picked card lifts out to the front.
-            ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
-                let spread = Double(index) - Double(kinds.count - 1) / 2
-                let isPicked = kind == selected
-                Button { pick(kind) } label: { card(kind) }
-                    .buttonStyle(PressableStyle())
-                    .scaleEffect(isPicked ? 1 : 0.86)
-                    .rotationEffect(.degrees(isPicked ? spread * 3 : spread * 10), anchor: .bottom)
-                    .offset(x: spread * 52, y: isPicked ? -18 : abs(spread) * 10)
-                    .zIndex(isPicked ? 100 : Double(index))
+        VStack(spacing: 10) {
+            // Points at the picked card.
+            Image(systemName: "arrowtriangle.down.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(selected.cardColor)
+
+            ZStack {
+                ForEach(Array(kinds.enumerated()), id: \.element) { i, kind in
+                    // Where this card sits relative to the middle, in cards.
+                    let offset = CGFloat(i - index) - drag
+                    let near = min(abs(offset), 1)
+                    PrankCard(kind: kind)
+                        .frame(width: cardWidth)
+                        .brightness(-near * 0.04)
+                        .scaleEffect(1 - near * 0.1)
+                        .rotationEffect(.degrees(Double(max(-1.6, min(1.6, offset))) * 10), anchor: .bottom)
+                        .offset(x: offset * spacing, y: near * 18)
+                        .opacity(abs(offset) > 2.2 ? 0 : 1)
+                        .zIndex(-Double(abs(offset)))
+                        .onTapGesture { pick(i) }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(kind.title). \(kind.pitch)")
+                        .accessibilityAddTraits(kind == selected ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityAction { pick(i) }
+                }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { value in
+                        var moved = -value.translation.width / spacing
+                        // Stretchy at the ends.
+                        if (index == 0 && moved < 0) || (index == kinds.count - 1 && moved > 0) { moved *= 0.3 }
+                        drag = moved
+                    }
+                    .onEnded { value in
+                        let flung = -value.predictedEndTranslation.width / spacing
+                        // One card per swipe, so it's easy to land where you want.
+                        let step = flung > 0.35 ? 1 : (flung < -0.35 ? -1 : 0)
+                        let target = max(0, min(kinds.count - 1, index + step))
+                        withAnimation(Motion.expand) {
+                            drag = 0
+                            selected = kinds[target]
+                        }
+                    }
+            )
+
+            // Which card, out of how many.
+            HStack(spacing: 6) {
+                ForEach(kinds) { kind in
+                    Capsule()
+                        .fill(kind == selected ? selected.cardColor : Color.palsInk.opacity(0.15))
+                        .frame(width: kind == selected ? 18 : 6, height: 6)
+                }
+            }
+            .accessibilityHidden(true)
         }
-        .frame(height: 260)
-        .frame(maxWidth: .infinity)
-        .gesture(
-            DragGesture(minimumDistance: 20).onEnded { value in
-                let next = selectedIndex + (value.translation.width < 0 ? 1 : -1)
-                if kinds.indices.contains(next) { pick(kinds[next]) }
-            }
-        )
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .sensoryFeedback(.selection, trigger: selected)
     }
 
-    private func pick(_ kind: PrankKind) {
-        withAnimation(Motion.select) { selected = kind }
+    private func pick(_ i: Int) {
+        withAnimation(Motion.expand) { selected = kinds[i] }
     }
+}
 
-    private func card(_ kind: PrankKind) -> some View {
-        ZStack(alignment: .topLeading) {
-            CardSurface(color: kind.cardColor, pattern: kind.cardPattern, cornerRadius: 26)
-            VStack(alignment: .leading, spacing: 6) {
-                PalsAvatar(name: target.name, color: target.color, size: 40, glass: false)
-                Spacer()
-                Text(kind.emoji).font(.system(size: 64))
-                Text(kind.title)
-                    .font(.palsDisplay(24))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+/// One prank as a trading card: its name, a big picture, and what it does.
+private struct PrankCard: View {
+    let kind: PrankKind
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(kind.title)
+                .font(.palsDisplay(22))
+                .foregroundStyle(Color.palsInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            ZStack {
+                CardSurface(color: kind.cardColor, pattern: kind.cardPattern, cornerRadius: 16)
+                Text(kind.emoji)
+                    .font(.system(size: 92))
+                    .shadow(color: .black.opacity(0.2), radius: 10, y: 8)
             }
-            .padding(16)
+            .aspectRatio(1.1, contentMode: .fit)
+
+            Text(kind.pitch)
+                .font(.palsBody(13))
+                .foregroundStyle(Color.palsInk.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .lineLimit(2, reservesSpace: true)
+                .minimumScaleFactor(0.85)
         }
-        .frame(width: 160, height: 220)
-        .shadow(color: .black.opacity(0.2), radius: 10, y: 6)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(kind == selected ? [.isButton, .isSelected] : .isButton)
+        .padding(12)
+        .background(Color(hex: 0xFFFBEA), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(kind.cardColor, lineWidth: 6)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }
 
