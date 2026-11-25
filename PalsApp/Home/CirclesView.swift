@@ -8,6 +8,9 @@ struct CirclesView: View {
 
     @State private var showingNewCircle = false
     @State private var showingJoin = false
+    /// The big New circle / Join buttons under the title are on screen. Once they scroll
+    /// away, a compact bar with a + takes over at the top.
+    @State private var actionsVisible = true
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -16,6 +19,12 @@ struct CirclesView: View {
                     HighlightHeadline(lines: ["Your"], highlight: "circles", size: 52)
                         .info("Every day each circle gets one activity from its pool. Skip it, and your pals get to prank you.", size: 20)
                         .padding(.top, 12)
+
+                    actions
+                        .padding(.top, 16)
+                        .onScrollVisibilityChange(threshold: 0.2) { visible in
+                            withAnimation(Motion.expand) { actionsVisible = visible }
+                        }
 
                     if model.isDemo {
                         Label(model.cloudStatus == .signedOut
@@ -43,44 +52,15 @@ struct CirclesView: View {
                         }
                     }
                     .padding(.top, 22)
-
-                    Button {
-                        showingNewCircle = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus")
-                                .fontWeight(.heavy)
-                            Text("New circle")
-                        }
-                        .font(.pals(20, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 58)
-                        .contentShape(Capsule())
-                    }
-                    .buttonStyle(PressableStyle())
-                    .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
-                    .padding(.top, 22)
-
-                    Button {
-                        showingJoin = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "person.badge.plus")
-                            Text("Join with a code")
-                        }
-                        .font(.pals(18))
-                        .foregroundStyle(Color.palsInk)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .contentShape(Capsule())
-                    }
-                    .buttonStyle(PressableStyle())
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    .padding(.top, 10)
                     .padding(.bottom, 24)
                 }
                 .padding(.horizontal, 20)
             }
             .scrollIndicators(.hidden)
+            .safeAreaBar(edge: .top) {
+                if !actionsVisible { compactBar.transition(.move(edge: .top).combined(with: .opacity)) }
+            }
+            .scrollEdgeEffectStyle(.soft, for: .top)
             // Pull down to sync with iCloud now.
             .refreshable { await model.refresh() }
             .background(Color.palsOffWhite.ignoresSafeArea())
@@ -90,6 +70,7 @@ struct CirclesView: View {
             .navigationTitle("Circles")
             .toolbar(.hidden, for: .navigationBar)
         }
+        .sensoryFeedback(.selection, trigger: actionsVisible)
         .sheet(isPresented: $showingNewCircle) {
             NewCircleSheet(model: model)
         }
@@ -97,6 +78,62 @@ struct CirclesView: View {
             JoinCircleSheet(model: model)
                 .presentationDetents([.medium])
         }
+    }
+}
+
+extension CirclesView {
+    /// New circle and Join, as two drops of glass melted into one shape.
+    fileprivate var actions: some View {
+        GlassEffectContainer(spacing: 20) {
+            HStack(spacing: 4) {
+                Button { showingNewCircle = true } label: {
+                    Label("New circle", systemImage: "plus")
+                        .font(.pals(17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+                .glassEffect(.regular.tint(.palsBlue).interactive(), in: .capsule)
+
+                Button { showingJoin = true } label: {
+                    Label("Join", systemImage: "person.badge.plus")
+                        .font(.pals(17, weight: .bold))
+                        .foregroundStyle(Color.palsInk)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .accessibilityLabel("Join with a code")
+            }
+        }
+    }
+
+    /// Pinned at the top after scrolling: the title and a + that opens both actions.
+    fileprivate var compactBar: some View {
+        HStack {
+            Text("Your circles")
+                .font(.pals(20, weight: .bold))
+                .foregroundStyle(Color.palsInk)
+            Spacer()
+            Menu {
+                Button { showingNewCircle = true } label: { Label("New circle", systemImage: "plus") }
+                Button { showingJoin = true } label: { Label("Join with a code", systemImage: "person.badge.plus") }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+            }
+            .glassEffect(.regular.tint(.palsBlue).interactive(), in: .circle)
+            .accessibilityLabel("New circle or join")
+        }
+        .padding(.leading, 20)
+        .padding(.trailing, 14)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: .capsule)
+        .padding(.horizontal, 12)
     }
 }
 
