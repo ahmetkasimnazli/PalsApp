@@ -345,16 +345,6 @@ struct PrankPicker: View {
                         }
                     }
             )
-
-            // Which card, out of how many.
-            HStack(spacing: 6) {
-                ForEach(kinds) { kind in
-                    Capsule()
-                        .fill(kind == selected ? selected.cardColor : Color.palsInk.opacity(0.15))
-                        .frame(width: kind == selected ? 18 : 6, height: 6)
-                }
-            }
-            .accessibilityHidden(true)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .sensoryFeedback(.selection, trigger: selected)
