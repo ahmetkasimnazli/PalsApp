@@ -11,25 +11,30 @@ struct PalsAvatar: View {
     var glass = true
 
     var body: some View {
-        ZStack {
-            if let photo {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFill()
-            } else if let memoji {
-                // Bundled profile photos come with their own colored background.
-                Image(uiImage: memoji)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                color
-                Text(initials)
-                    .font(.palsDisplay(size * 0.38))
-                    .foregroundStyle(.white)
+        // A fixed square the image fills from behind, so a photo of any shape or size
+        // (portrait, panorama, tiny) always covers the whole circle, centred.
+        Color.clear
+            .frame(width: size - 2 * ring, height: size - 2 * ring)
+            .overlay {
+                if let photo {
+                    Image(uiImage: photo)
+                        .resizable()
+                        .scaledToFill()
+                } else if let memoji {
+                    // Bundled profile photos come with their own colored background.
+                    Image(uiImage: memoji)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    ZStack {
+                        color
+                        Text(initials)
+                            .font(.palsDisplay(size * 0.38))
+                            .foregroundStyle(.white)
+                    }
+                }
             }
-        }
-        .frame(width: size - 2 * ring, height: size - 2 * ring)
-        .clipShape(Circle())
+            .clipShape(Circle())
         // Glass ring: the photo sits inside a slightly larger glass disc.
         .padding(ring)
         .background {

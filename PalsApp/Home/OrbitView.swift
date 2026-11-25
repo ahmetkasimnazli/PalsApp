@@ -48,8 +48,9 @@ struct OrbitView: View {
                     let shown = Array(friends.prefix(4))
                     ForEach(Array(shown.enumerated()), id: \.element.id) { index, friend in
                         let angle = slotAngle(index, of: shown.count) + rotation
-                        friendView(friend)
-                            .scaleEffect(depthScale(angle))
+                        // Sized rather than scaled: Liquid Glass ignores scaleEffect, so a scaled
+                        // avatar's glass ring would stay full size around a smaller photo.
+                        friendView(friend, size: 76 * depthScale(angle))
                             .position(point(angle, center: center, radius: radius))
                             .accessibilityAddTraits(.isButton)
                             .accessibilityAction { onFriendTap(friend) }
@@ -80,8 +81,8 @@ struct OrbitView: View {
         .accessibilityLabel("You, \(streak) day streak, \(Int(progress * 100)) percent of your circle done today")
     }
 
-    private func friendView(_ friend: Friend) -> some View {
-        PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: 76)
+    private func friendView(_ friend: Friend, size: CGFloat) -> some View {
+        PalsAvatar(name: friend.name, photo: friend.photo, color: friend.color, size: size)
             .overlay(alignment: .bottomTrailing) {
                 if friend.isActive {
                     Circle()
