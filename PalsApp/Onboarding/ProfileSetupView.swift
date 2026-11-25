@@ -27,8 +27,9 @@ struct ProfileSetupView: View {
 
                 VStack(spacing: 14) {
                     // Smaller while typing so the field stays above the keyboard.
-                    ProfilePhotoPicker(photo: $photo, name: name, size: nameFocused ? 112 : 176)
-                    Text(photo == nil ? "Add a photo so your pals spot you on their orbit." : "Looking good.")
+                    ProfilePhotoPicker(photo: $photo, name: name, size: nameFocused ? 112 : 176,
+                                       showsOptions: !nameFocused)
+                    Text(photo == nil ? "Add a photo or your Memoji so pals spot you on their orbit." : "Looking good.")
                         .font(.palsBody(15))
                         .foregroundStyle(.white.opacity(0.7))
                         .multilineTextAlignment(.center)

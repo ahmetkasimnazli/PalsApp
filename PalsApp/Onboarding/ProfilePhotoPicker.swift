@@ -1,15 +1,21 @@
 import PhotosUI
 import SwiftUI
 
-/// Big round avatar: tap to pick a photo from the library. Shows the photo, or your
-/// initial (live, as you type your name) so you see exactly what your pals will see.
+/// Big round avatar: tap to pick a photo from the library or use one of your Memoji. Shows the
+/// photo, or your initial (live, as you type your name) so you see exactly what your pals will see.
 struct ProfilePhotoPicker: View {
     @Binding var photo: UIImage?
     var name: String = ""
     var size: CGFloat = 168
+    /// Also shows "Photo" and "Memoji" buttons under the avatar (onboarding).
+    var showsOptions = false
+    /// Colours for the option buttons: light on the onboarding's blue, dark on a light sheet.
+    var onDark = true
 
     @State private var selection: PhotosPickerItem?
     @State private var isLoading = false
+    @State private var pickingPhoto = false
+    @State private var pickingMemoji = false
 
     private var ring: CGFloat { max(4, size * 0.05) }
     private var initial: String {
@@ -17,55 +23,93 @@ struct ProfilePhotoPicker: View {
     }
 
     var body: some View {
-        PhotosPicker(selection: $selection, matching: .images, photoLibrary: .shared()) {
-            ZStack {
-                if let photo {
-                    Image(uiImage: photo)
-                        .resizable()
-                        .scaledToFill()
-                        .transition(.opacity)
-                } else if let bundled = PalsAvatar.bundledPhoto(for: name) {
-                    // Same fallback the avatar uses everywhere else, so this matches what pals see.
-                    Image(uiImage: bundled)
-                        .resizable()
-                        .scaledToFill()
-                        .transition(.opacity)
-                } else {
-                    Color.palsPink
-                    if isLoading {
-                        ProgressView().tint(.white)
-                    } else if initial.isEmpty {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: size * 0.24, weight: .semibold))
-                            .foregroundStyle(.white)
-                    } else {
-                        Text(initial)
-                            .font(.palsDisplay(size * 0.42))
-                            .foregroundStyle(.white)
-                            .contentTransition(.numericText())
-                    }
+        VStack(spacing: 16) {
+            Menu {
+                Button { pickingPhoto = true } label: { Label("Choose a photo", systemImage: "photo.on.rectangle") }
+                Button { pickingMemoji = true } label: { Label("Use my Memoji", systemImage: "face.smiling") }
+            } label: {
+                avatar
+            }
+            .buttonStyle(PressableStyle())
+            .accessibilityLabel(photo == nil ? "Add profile photo or Memoji" : "Change profile photo")
+
+            if showsOptions {
+                HStack(spacing: 10) {
+                    option("Photo", systemImage: "photo.on.rectangle") { pickingPhoto = true }
+                    option("Memoji", systemImage: "face.smiling") { pickingMemoji = true }
                 }
             }
-            .frame(width: size - 2 * ring, height: size - 2 * ring)
-            .clipShape(Circle())
-            .padding(ring)
-            .glassEffect(.regular, in: .circle)
-            .overlay(alignment: .bottomTrailing) {
-                Image(systemName: photo == nil ? "plus" : "pencil")
-                    .font(.system(size: size * 0.11, weight: .bold))
-                    .foregroundStyle(Color.palsIndigo)
-                    .frame(width: size * 0.28, height: size * 0.28)
-                    .glassEffect(.regular.tint(.white), in: .circle)
-                    .offset(x: -size * 0.02, y: -size * 0.02)
-            }
-            .animation(Motion.select, value: initial)
         }
-        .buttonStyle(PressableStyle())
-        .accessibilityLabel(photo == nil ? "Add profile photo" : "Change profile photo")
+        .photosPicker(isPresented: $pickingPhoto, selection: $selection, matching: .images, photoLibrary: .shared())
+        .sheet(isPresented: $pickingMemoji) {
+            MemojiPickerSheet { image in
+                withAnimation(Motion.appear) { photo = image }
+            }
+        }
         .onChange(of: selection) { _, item in
             guard let item else { return }
             Task { await load(item) }
+            selection = nil
         }
+    }
+
+    private var avatar: some View {
+        ZStack {
+            if let photo {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+                    .transition(.opacity)
+            } else if let bundled = PalsAvatar.bundledPhoto(for: name) {
+                // Same fallback the avatar uses everywhere else, so this matches what pals see.
+                Image(uiImage: bundled)
+                    .resizable()
+                    .scaledToFill()
+                    .transition(.opacity)
+            } else {
+                Color.palsPink
+                if isLoading {
+                    ProgressView().tint(.white)
+                } else if initial.isEmpty {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: size * 0.24, weight: .semibold))
+                        .foregroundStyle(.white)
+                } else {
+                    Text(initial)
+                        .font(.palsDisplay(size * 0.42))
+                        .foregroundStyle(.white)
+                        .contentTransition(.numericText())
+                }
+            }
+        }
+        .frame(width: size - 2 * ring, height: size - 2 * ring)
+        .clipShape(Circle())
+        .padding(ring)
+        .glassEffect(.regular, in: .circle)
+        .overlay(alignment: .bottomTrailing) {
+            Image(systemName: photo == nil ? "plus" : "pencil")
+                .font(.system(size: size * 0.11, weight: .bold))
+                .foregroundStyle(Color.palsIndigo)
+                .frame(width: size * 0.28, height: size * 0.28)
+                // A plain disc: Liquid Glass doesn't draw inside a Menu's label.
+                .background(.white, in: Circle())
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                .offset(x: -size * 0.02, y: -size * 0.02)
+        }
+        .animation(Motion.select, value: initial)
+    }
+
+    private func option(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.pals(16, weight: .bold))
+                .foregroundStyle(onDark ? Color.white : Color.palsInk)
+                .padding(.horizontal, 18)
+                .frame(minHeight: 44)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .glassEffect(.regular.interactive(), in: .capsule)
     }
 
     private func load(_ item: PhotosPickerItem) async {

@@ -354,7 +354,7 @@ private struct EditProfileSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                ProfilePhotoPicker(photo: $photo, name: name, size: 140)
+                ProfilePhotoPicker(photo: $photo, name: name, size: 140, showsOptions: true, onDark: false)
                     .padding(.top, 8)
 
                 if photo != nil {
