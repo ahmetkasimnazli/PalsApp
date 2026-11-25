@@ -19,12 +19,21 @@ struct Friend: Identifiable, Hashable {
 
 /// Something a circle can do on a day. Anyone in the circle can add one to the pool.
 struct CircleActivity: Identifiable, Hashable {
-    let id = UUID()
+    var id = UUID()
     var emoji: String
     var title: String
     /// Length of the timer; `nil` means there's no timer, you just mark it done.
     var minutes: Int?
     var addedBy: String = "Pals"
+    /// Its CloudKit record, for activities in real circles.
+    var cloudID: String? = nil
+    /// You may edit or delete it: in real circles only the person who added it can.
+    var canEdit = true
+    /// Day it was added ("yyyy-MM-dd"), so it joins the daily draw from the next day.
+    var addedOn: String? = nil
+
+    /// What the daily draw knows a card by: the same on every phone and through edits.
+    var drawKey: String { cloudID ?? title }
 
     var durationLabel: String {
         guard let minutes else { return "No timer" }
@@ -125,26 +134,34 @@ struct PalsCircle: Identifiable, Hashable {
         pick(for: Calendar.current.date(byAdding: .day, value: 1, to: .now) ?? .now)
     }
 
-    /// Picks the day's activity from the pool, never the same as the day before.
+    /// Picks the day's activity from the pool, not the same as the day before.
     ///
-    /// It's worked out from the circle's name and the date rather than chosen at random, so every
-    /// member's phone lands on the same activity without a server deciding it.
+    /// It's worked out from the circle's code and the date rather than chosen at random, so every
+    /// member's phone lands on the same activity without a server deciding it. Each card gets a
+    /// score for the day and the highest wins, so taking out or editing another card never
+    /// changes the day's pick; a card added today joins the draw tomorrow.
     func pick(for date: Date) -> CircleActivity {
-        guard pool.count > 1 else { return pool.first ?? CircleActivity.suggestions[0] }
-        let index = rawIndex(for: date)
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: date) ?? date
-        let repeated = index == rawIndex(for: yesterday)
-        return pool[repeated ? (index + 1) % pool.count : index]
+        let day = PalsDay.key(date)
+        let settled = pool.filter { ($0.addedOn ?? "") < day }
+        let cards = settled.isEmpty ? pool : settled
+        guard cards.count > 1 else { return cards.first ?? CircleActivity.suggestions[0] }
+        let yesterday = PalsDay.key(Calendar.current.date(byAdding: .day, value: -1, to: date) ?? date)
+        let yesterdays = winner(cards, day: yesterday)
+        return winner(cards.filter { $0.drawKey != yesterdays.drawKey }, day: day)
     }
 
-    private func rawIndex(for date: Date) -> Int {
+    private func winner(_ cards: [CircleActivity], day: String) -> CircleActivity {
+        cards.max { score($0, day: day) < score($1, day: day) } ?? cards[0]
+    }
+
+    private func score(_ card: CircleActivity, day: String) -> UInt64 {
         // FNV-1a: stable across launches and devices (unlike `hashValue`).
-        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
         // Real circles use their invite code, which every member's phone shares.
-        for byte in "\(code ?? name)|\(PalsDay.key(date))".utf8 {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in "\(code ?? name)|\(day)|\(card.drawKey)".utf8 {
             hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3
         }
-        return Int(hash % UInt64(pool.count))
+        return hash
     }
 }
 
@@ -181,6 +198,8 @@ final class HomeModel {
     /// Stable local IDs for real circles (by code) and pals (by iCloud user ID) across refreshes.
     @ObservationIgnored private var circleIDs: [String: UUID] = [:]
     @ObservationIgnored private var friendIDs: [String: UUID] = [:]
+    /// …and for activities, by record name.
+    @ObservationIgnored private var activityIDs: [String: UUID] = [:]
     @ObservationIgnored private var touchedMembership = false
     /// The sync in flight, so overlapping requests share it.
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
@@ -194,6 +213,9 @@ final class HomeModel {
     /// Things you just did that iCloud's queries may not show for a few seconds, kept on
     /// screen until they do: activities you added and pranks you sent, by circle code.
     @ObservationIgnored private var recentActivities: [String: [(activity: CircleActivity, at: Date)]] = [:]
+    /// Activities you edited or deleted, by record name, until queries catch up.
+    @ObservationIgnored private var recentActivityEdits: [String: (activity: CircleActivity, at: Date)] = [:]
+    @ObservationIgnored private var recentActivityDeletes: [String: Date] = [:]
     /// ["<code>|<day>": [pal's user ID: prank]]
     @ObservationIgnored private var recentPranks: [String: [String: PrankKind]] = [:]
 
@@ -377,13 +399,48 @@ final class HomeModel {
         guard let index = circles.firstIndex(where: { $0.id == circleID }) else { return }
         var activity = activity
         activity.addedBy = "You"
+        activity.addedOn = PalsDay.key(.now)
+        let code = circles[index].code
+        let id = UUID()
+        if let code {
+            let recordName = CloudStore.activityRecordName(code: code, id: id)
+            activity.cloudID = recordName
+            activityIDs[recordName] = activity.id
+        }
         circles[index].pool.append(activity)
-        if let code = circles[index].code {
+        if let code {
             let name = myName
-            let id = UUID()
             recentActivities[code, default: []].append((activity, .now))
             push { try await $0.addActivity(activity, code: code, addedBy: name, id: id) }
         }
+    }
+
+    /// Changes an activity's emoji, title and timer, for everyone in the circle.
+    func updateActivity(_ activity: CircleActivity, emoji: String, title: String, minutes: Int?,
+                        in circleID: PalsCircle.ID) {
+        guard activity.canEdit, let c = circles.firstIndex(where: { $0.id == circleID }),
+              let a = circles[c].pool.firstIndex(where: { $0.id == activity.id }) else { return }
+        circles[c].pool[a].emoji = emoji
+        circles[c].pool[a].title = title
+        circles[c].pool[a].minutes = minutes
+        guard let code = circles[c].code, let recordName = activity.cloudID else { return }
+        let edited = circles[c].pool[a]
+        recentActivityEdits[recordName] = (edited, .now)
+        if let i = recentActivities[code]?.firstIndex(where: { $0.activity.cloudID == recordName }) {
+            recentActivities[code]?[i].activity = edited
+        }
+        push { try await $0.updateActivity(recordName: recordName, emoji: emoji, title: title, minutes: minutes) }
+    }
+
+    /// Takes an activity out of the pool for everyone. A circle keeps at least one.
+    func deleteActivity(_ activity: CircleActivity, in circleID: PalsCircle.ID) {
+        guard activity.canEdit, let c = circles.firstIndex(where: { $0.id == circleID }),
+              circles[c].pool.count > 1 else { return }
+        circles[c].pool.removeAll { $0.id == activity.id }
+        guard let code = circles[c].code, let recordName = activity.cloudID else { return }
+        recentActivityDeletes[recordName] = .now
+        recentActivities[code]?.removeAll { $0.activity.cloudID == recordName }
+        push { try await $0.deleteActivity(recordName: recordName) }
     }
 
     // MARK: - Circles
@@ -765,10 +822,25 @@ final class HomeModel {
             let doneToday = remote.done[today] ?? []
             let sentToday = recentPranks["\(remote.code)|\(today)"] ?? [:]
             // Activities you added that the query doesn't show yet (forgotten after 5 minutes).
-            let shown = Set(remote.activities.map(\.title))
+            let shown = Set(remote.activities.map(\.recordName))
             recentActivities[remote.code] = recentActivities[remote.code]?
-                .filter { !shown.contains($0.activity.title) && Date.now.timeIntervalSince($0.at) < 5 * 60 }
+                .filter { !shown.contains($0.activity.cloudID ?? "") && Date.now.timeIntervalSince($0.at) < 5 * 60 }
             let unseen = recentActivities[remote.code]?.map(\.activity) ?? []
+            // Your recent edits and deletes win over a query that hasn't caught up (for 2 minutes).
+            recentActivityEdits = recentActivityEdits.filter { Date.now.timeIntervalSince($0.value.at) < 2 * 60 }
+            recentActivityDeletes = recentActivityDeletes.filter { Date.now.timeIntervalSince($0.value) < 2 * 60 }
+            let pool: [CircleActivity] = remote.activities
+                .filter { recentActivityDeletes[$0.recordName] == nil }
+                .map { cloud in
+                    var activity = recentActivityEdits[cloud.recordName]?.activity
+                        ?? CircleActivity(emoji: cloud.emoji, title: cloud.title, minutes: cloud.minutes,
+                                          addedBy: cloud.addedBy, cloudID: cloud.recordName, canEdit: cloud.isMine,
+                                          addedOn: cloud.createdAt.map { PalsDay.key($0) })
+                    // Same ID on every refresh, so a sheet open on it keeps working.
+                    activity.id = activityIDs[cloud.recordName] ?? activity.id
+                    activityIDs[cloud.recordName] = activity.id
+                    return activity
+                }
 
             let friends: [Friend] = remote.members.filter { $0.userID != me }.map { member in
                 let friendID = friendIDs[member.userID] ?? UUID()
@@ -788,9 +860,7 @@ final class HomeModel {
 
             var circle = PalsCircle(
                 name: remote.name, emoji: remote.emoji, color: palette[remote.colorIndex % palette.count],
-                pool: remote.activities.map {
-                    CircleActivity(emoji: $0.emoji, title: $0.title, minutes: $0.minutes, addedBy: $0.addedBy)
-                } + unseen,
+                pool: pool + unseen,
                 streak: Self.streak(remote.done, members: Set(remote.members.map(\.userID))),
                 friends: friends,
                 code: remote.code

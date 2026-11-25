@@ -31,6 +31,8 @@ struct ActivityMiniCard: View {
     var badge: String? = nil
     var note: String? = nil
     var height: CGFloat = 128
+    /// Shown in the top-right corner, e.g. an edit menu.
+    var accessory: AnyView? = nil
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -52,6 +54,7 @@ struct ActivityMiniCard: View {
                             .padding(.vertical, 4)
                             .background(.white, in: Capsule())
                     }
+                    if let accessory { accessory }
                 }
                 Spacer(minLength: 0)
                 HStack(alignment: .bottom) {
@@ -76,10 +79,13 @@ struct ActivityMiniCard: View {
 
 // MARK: - Pool as a wallet deck
 
-/// The circle's activity pool as a stack of cards, like a wallet. Tap to fan it open.
+/// The circle's activity pool as a stack of cards, like a wallet. Tap to fan it open. Fanned
+/// out, cards you can change get a menu (also on a long press) to edit or delete them.
 struct PoolDeck: View {
     let pool: [CircleActivity]
     let todayID: CircleActivity.ID?
+    var onEdit: ((CircleActivity) -> Void)? = nil
+    var onDelete: ((CircleActivity) -> Void)? = nil
 
     @State private var open = false
 
@@ -88,22 +94,33 @@ struct PoolDeck: View {
         pool.sorted { a, _ in a.id == todayID }
     }
 
+    /// A circle always keeps at least one activity.
+    private var canDelete: Bool { pool.count > 1 }
+
     private let cardHeight: CGFloat = 128
     private var step: CGFloat { open ? cardHeight + 10 : 34 }
 
     var body: some View {
         let cards = ordered
-        Button {
-            withAnimation(Motion.expand) { open.toggle() }
-        } label: {
         ZStack(alignment: .top) {
             ForEach(Array(cards.enumerated()), id: \.element.id) { index, activity in
                 // Back cards first (higher in the stack), today's card in front at the bottom.
                 let position = cards.count - 1 - index
+                let editable = activity.canEdit && onEdit != nil
                 ActivityMiniCard(activity: activity,
                                  badge: activity.id == todayID ? "Today" : nil,
                                  note: "by \(activity.addedBy)",
-                                 height: cardHeight)
+                                 height: cardHeight,
+                                 accessory: open && editable ? AnyView(menu(for: activity)) : nil)
+                    .contextMenu {
+                        if editable { actions(for: activity) }
+                    }
+                    .accessibilityActions {
+                        if editable {
+                            Button("Edit") { onEdit?(activity) }
+                            if canDelete { Button("Delete") { onDelete?(activity) } }
+                        }
+                    }
                     .offset(y: CGFloat(position) * step)
                     .scaleEffect(open ? 1 : 1 - CGFloat(index) * 0.03, anchor: .top)
                     .zIndex(Double(cards.count - index))
@@ -111,11 +128,37 @@ struct PoolDeck: View {
         }
         .frame(height: cardHeight + CGFloat(max(0, cards.count - 1)) * step, alignment: .top)
         .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(Motion.expand) { open.toggle() }
         }
-        .buttonStyle(PressableStyle())
         .sensoryFeedback(.selection, trigger: open)
         .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isButton)
         .accessibilityHint(open ? "Double tap to stack the cards" : "Double tap to fan out the cards")
+    }
+
+    private func menu(for activity: CircleActivity) -> some View {
+        Menu {
+            actions(for: activity)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(.white.opacity(0.25), in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .padding(.top, -8)
+        .padding(.trailing, -8)
+        .accessibilityLabel("Edit or delete \(activity.title)")
+    }
+
+    @ViewBuilder
+    private func actions(for activity: CircleActivity) -> some View {
+        Button { onEdit?(activity) } label: { Label("Edit", systemImage: "pencil") }
+        Button(role: .destructive) { onDelete?(activity) } label: { Label("Delete", systemImage: "trash") }
+            .disabled(!canDelete)
     }
 }
 

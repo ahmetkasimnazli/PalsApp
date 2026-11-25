@@ -214,6 +214,8 @@ private struct CircleDetailView: View {
 
     @State private var prankTarget: Friend?
     @State private var addingActivity = false
+    @State private var editingActivity: CircleActivity?
+    @State private var deletingActivity: CircleActivity?
 
     private var circle: PalsCircle? { model.circles.first { $0.id == circleID } }
 
@@ -291,6 +293,28 @@ private struct CircleDetailView: View {
                     withAnimation { model.addActivity(activity, to: circleID) }
                 }
             }
+            .sheet(item: $editingActivity) { activity in
+                AddActivitySheet(editing: activity) { edited in
+                    withAnimation {
+                        model.updateActivity(activity, emoji: edited.emoji, title: edited.title,
+                                             minutes: edited.minutes, in: circleID)
+                    }
+                }
+            }
+            .confirmationDialog(
+                "Delete \u{201C}\(deletingActivity?.title ?? "")\u{201D}?",
+                isPresented: Binding(get: { deletingActivity != nil }, set: { if !$0 { deletingActivity = nil } }),
+                titleVisibility: .visible,
+                presenting: deletingActivity
+            ) { activity in
+                Button("Delete", role: .destructive) {
+                    withAnimation(Motion.update) { model.deleteActivity(activity, in: circleID) }
+                }
+            } message: { activity in
+                Text(activity.id == circle.today.id
+                     ? "It leaves the pool for everyone, and today's card changes to another activity."
+                     : "It leaves the pool for everyone in the circle.")
+            }
             .sheet(item: $prankTarget) { friend in
                 PrankSheet(
                     friend: model.friend(id: friend.id) ?? friend,
@@ -356,11 +380,13 @@ private struct CircleDetailView: View {
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("THE POOL")
                 .padding(.top, 26)
-            Text("Every day one card is drawn from this deck for everyone. Tap to fan it out; anyone can add a card.")
+            Text("Every day one card is drawn from this deck for everyone. Tap to fan it out; anyone can add a card, and you can edit or delete the ones you added.")
                 .font(.palsBody(14))
                 .foregroundStyle(Color.palsInk.opacity(0.5))
 
-            PoolDeck(pool: circle.pool, todayID: todayID)
+            PoolDeck(pool: circle.pool, todayID: todayID,
+                     onEdit: { editingActivity = $0 },
+                     onDelete: { deletingActivity = $0 })
                 .padding(.top, 6)
 
             Button { addingActivity = true } label: {

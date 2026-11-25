@@ -2,15 +2,33 @@ import SwiftUI
 
 // MARK: - Add activity
 
-/// Lets anyone in a circle add an activity to its pool.
+/// Lets anyone in a circle add an activity to its pool, or change one they added.
 struct AddActivitySheet: View {
+    /// The activity being changed; `nil` adds a new one.
+    var editing: CircleActivity? = nil
     var onAdd: (CircleActivity) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var emoji = "✨"
+    @State private var title: String
+    @State private var emoji: String
     @State private var minutes: Int?
     @State private var category: ActivityCategory?
+
+    init(editing: CircleActivity? = nil, onAdd: @escaping (CircleActivity) -> Void) {
+        self.editing = editing
+        self.onAdd = onAdd
+        _title = State(initialValue: editing?.title ?? "")
+        _emoji = State(initialValue: editing?.emoji ?? "✨")
+        _minutes = State(initialValue: editing?.minutes)
+    }
+
+    private var isEditing: Bool { editing != nil }
+    /// Nothing to save while the edit matches what's there.
+    private var unchanged: Bool {
+        guard let editing else { return false }
+        return editing.title == trimmed && editing.emoji == emoji && editing.minutes == minutes
+    }
+    private var canSave: Bool { !trimmed.isEmpty && !unchanged }
 
     private let emojis = ["✨", "🚶", "🏃", "📚", "🧘", "💪", "🤸", "🧎", "💧", "🥗", "🎸", "📵", "😴", "🧹"]
     private let timers: [Int?] = [nil, 1, 5, 10, 15, 30]
@@ -21,7 +39,7 @@ struct AddActivitySheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .top) {
-                    HighlightHeadline(lines: ["New"], highlight: "activity", size: 44)
+                    HighlightHeadline(lines: [isEditing ? "Edit" : "New"], highlight: "activity", size: 44)
                     Spacer()
                     CloseButton { dismiss() }
                 }
@@ -103,7 +121,9 @@ struct AddActivitySheet: View {
                     }
                 }
 
-                Text("It joins the circle's pool. Each day one activity from the pool is picked for everyone.")
+                Text(isEditing
+                     ? "The change shows up for everyone in the circle."
+                     : "It joins the circle's pool. Each day one activity from the pool is picked for everyone.")
                     .font(.palsBody(14))
                     .foregroundStyle(Color.palsInk.opacity(0.5))
 
@@ -111,15 +131,15 @@ struct AddActivitySheet: View {
                     onAdd(CircleActivity(emoji: emoji, title: trimmed, minutes: minutes))
                     dismiss()
                 } label: {
-                    Text("Add activity")
+                    Text(isEditing ? "Save changes" : "Add activity")
                         .font(.pals(20, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 58)
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PressableStyle())
-                .glassEffect(.regular.tint(.palsBlue.opacity(trimmed.isEmpty ? 0.4 : 1)).interactive(!trimmed.isEmpty), in: .capsule)
-                .disabled(trimmed.isEmpty)
+                .glassEffect(.regular.tint(.palsBlue.opacity(canSave ? 1 : 0.4)).interactive(canSave), in: .capsule)
+                .disabled(!canSave)
             }
             .padding(24)
         }

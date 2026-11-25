@@ -108,10 +108,14 @@ final class CloudStore {
             activities: try await activities
                 .sorted { ($0["createdAt"] as? Date ?? .distantPast) < ($1["createdAt"] as? Date ?? .distantPast) }
                 .map { record in
-                    CloudActivity(emoji: record["emoji"] as? String ?? "✨",
+                    CloudActivity(recordName: record.recordID.recordName,
+                                  emoji: record["emoji"] as? String ?? "✨",
                                   title: record["title"] as? String ?? "Something",
                                   minutes: record["minutes"] as? Int,
-                                  addedBy: record["addedBy"] as? String ?? "Pals")
+                                  addedBy: record["addedBy"] as? String ?? "Pals",
+                                  createdAt: record["createdAt"] as? Date,
+                                  // Only the person who added an activity can change it (public DB roles).
+                                  isMine: Self.isMine(record, me: cachedUserID))
                 },
             done: try await done.reduce(into: [String: Set<String>]()) { result, record in
                 guard let day = record["day"] as? String, let user = record["userID"] as? String else { return }
@@ -180,6 +184,32 @@ final class CloudStore {
     /// `id` is chosen by the caller once, so retrying the same add never makes a duplicate.
     func addActivity(_ activity: CircleActivity, code: String, addedBy: String, id: UUID) async throws {
         try await save([activityRecord(code: code, activity: activity, addedBy: addedBy, createdAt: .now, id: id)])
+    }
+
+    /// The record name `addActivity` uses for an activity, so it can be edited or deleted later.
+    static func activityRecordName(code: String, id: UUID) -> String { "activity-\(code)-\(id.uuidString)" }
+
+    /// Changes an activity's emoji, title and timer, keeping who added it and when.
+    func updateActivity(recordName: String, emoji: String, title: String, minutes: Int?) async throws {
+        let record = try await db.record(for: CKRecord.ID(recordName: recordName))
+        record["emoji"] = emoji
+        record["title"] = title
+        record["minutes"] = minutes
+        let result = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
+        for (_, outcome) in result.saveResults {
+            if case .failure(let error) = outcome { throw error }
+        }
+    }
+
+    /// Removes an activity from the pool. Already gone counts as done.
+    func deleteActivity(recordName: String) async throws {
+        let result = try await db.modifyRecords(saving: [], deleting: [CKRecord.ID(recordName: recordName)])
+        for (_, outcome) in result.deleteResults {
+            if case .failure(let error) = outcome {
+                if (error as? CKError)?.code == .unknownItem { continue }
+                throw error
+            }
+        }
     }
 
     func markDone(code: String, day: String) async throws {
@@ -312,10 +342,17 @@ final class CloudStore {
         return record
     }
 
+    /// Whether this user created the record. CloudKit reports your own records' creator as
+    /// `CKCurrentUserDefaultName` rather than your user ID.
+    private static func isMine(_ record: CKRecord, me: String?) -> Bool {
+        guard let creator = record.creatorUserRecordID?.recordName else { return false }
+        return creator == CKCurrentUserDefaultName || creator == me
+    }
+
     private func activityRecord(code: String, activity: CircleActivity, addedBy: String, createdAt: Date,
                                 id: UUID = UUID()) -> CKRecord {
         let record = CKRecord(recordType: RecordType.activity,
-                              recordID: CKRecord.ID(recordName: "activity-\(code)-\(id.uuidString)"))
+                              recordID: CKRecord.ID(recordName: Self.activityRecordName(code: code, id: id)))
         record["circleID"] = code
         record["emoji"] = activity.emoji
         record["title"] = activity.title
@@ -406,10 +443,14 @@ struct CloudMember {
 }
 
 struct CloudActivity {
+    let recordName: String
     let emoji: String
     let title: String
     let minutes: Int?
     let addedBy: String
+    let createdAt: Date?
+    /// You added it, so you can edit or delete it.
+    let isMine: Bool
 }
 
 struct CloudMoment {
