@@ -115,7 +115,11 @@ struct MainTabView: View {
                 await model.refresh()
             }
         }
-        .task { model.startMonitoringNetwork() }
+        .task {
+            model.startMonitoringNetwork()
+            // CloudKit pushes refresh this model the moment a pal changes something.
+            PushNotifications.model = model
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refresh() } }
         }

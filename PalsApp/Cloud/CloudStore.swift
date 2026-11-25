@@ -235,6 +235,70 @@ final class CloudStore {
         _ = try await db.modifyRecords(saving: [], deleting: old)
     }
 
+    // MARK: - Push
+
+    /// Keeps this user's CloudKit subscriptions in step with their circles, so a change in any of
+    /// them reaches this device as a push right away (the 15 s refresh stays as a fallback):
+    ///
+    /// - `sub-<code>-Member|Done|Moment|Activity`: silent pushes (content-available) whenever a
+    ///   pal joins, finishes, posts or adds something. Uses `circleID`, already queryable.
+    /// - `sub-<code>-Prank`: a visible notification when a pal pranks *you* (`toID == me`).
+    ///   Needs `Prank.toID` marked Queryable in CloudKit Console (Development, then deploy to
+    ///   Production); until then the server rejects just this one and the rest still work.
+    ///
+    /// Subscriptions belong to the iCloud user (not the device) and live in the public database.
+    /// Ones that already exist are left alone; ones for circles you're no longer in are deleted.
+    func syncSubscriptions(circles: [(code: String, name: String)]) async throws {
+        let me = try await userID()
+        let existing = Set(try await db.allSubscriptions().map(\.subscriptionID))
+
+        var wanted: [CKSubscription] = []
+        for circle in circles {
+            let byCircle = NSPredicate(format: "circleID == %@", circle.code)
+            for type in [RecordType.member, RecordType.done, RecordType.moment, RecordType.activity] {
+                let subscription = CKQuerySubscription(
+                    recordType: type, predicate: byCircle,
+                    subscriptionID: Self.subscriptionID(code: circle.code, type: type),
+                    options: [.firesOnRecordCreation, .firesOnRecordUpdate, .firesOnRecordDeletion])
+                let info = CKSubscription.NotificationInfo()
+                info.shouldSendContentAvailable = true // silent: just wakes the app to refresh
+                subscription.notificationInfo = info
+                wanted.append(subscription)
+            }
+
+            let prank = CKQuerySubscription(
+                recordType: RecordType.prank,
+                predicate: NSPredicate(format: "circleID == %@ AND toID == %@", circle.code, me),
+                subscriptionID: Self.subscriptionID(code: circle.code, type: RecordType.prank),
+                options: [.firesOnRecordCreation])
+            let info = CKSubscription.NotificationInfo()
+            // The text is fixed per subscription (who sent it isn't on the record), so it keeps
+            // the suspense: the app shows who it was when it opens.
+            info.title = "\(circle.name) 👀"
+            info.alertBody = "Someone just pranked you. Open Pals to see who."
+            info.soundName = "default"
+            info.shouldSendContentAvailable = true // also refresh, so the prank is ready to play
+            prank.notificationInfo = info
+            wanted.append(prank)
+        }
+
+        let toSave = wanted.filter { !existing.contains($0.subscriptionID) }
+        let wantedIDs = Set(wanted.map(\.subscriptionID))
+        let toDelete = existing.filter { $0.hasPrefix("sub-") && !wantedIDs.contains($0) }
+        guard !toSave.isEmpty || !toDelete.isEmpty else { return }
+
+        // Saved one by one in a single request; a rejected one (e.g. the Prank subscription
+        // before its index is deployed) doesn't stop the others.
+        let result = try await db.modifySubscriptions(saving: toSave, deleting: Array(toDelete))
+        for (id, outcome) in result.saveResults {
+            if case .failure(let error) = outcome {
+                PalsError.logOnly(error, context: "subscription \(id)")
+            }
+        }
+    }
+
+    static func subscriptionID(code: String, type: String) -> String { "sub-\(code)-\(type)" }
+
     // MARK: - Helpers
 
     private func memberRecord(code: String, userID: String, me: MemberProfile) -> CKRecord {

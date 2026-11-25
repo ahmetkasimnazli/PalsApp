@@ -9,6 +9,9 @@ import SwiftUI
 
 @main
 struct PalsAppApp: App {
+    /// CloudKit pushes: registers at launch and routes them to the home model.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         PalsFont.register()
         // Standard navigation bars, set in the app's typeface.

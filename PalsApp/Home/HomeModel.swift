@@ -189,6 +189,8 @@ final class HomeModel {
     /// Writes that failed because we were offline; sent again once we're back.
     @ObservationIgnored private var pendingWrites: [CloudWrite] = []
     @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    /// Circle codes the push subscriptions were last set up for (`nil`: not yet this launch).
+    @ObservationIgnored private var subscribedCodes: Set<String>?
     /// Things you just did that iCloud's queries may not show for a few seconds, kept on
     /// screen until they do: activities you added and pranks you sent, by circle code.
     @ObservationIgnored private var recentActivities: [String: [(activity: CircleActivity, at: Date)]] = [:]
@@ -579,12 +581,30 @@ final class HomeModel {
                 push { try await $0.deleteOldMoments() }
             }
             apply(fetched, me: me)
+            syncSubscriptionsIfNeeded(fetched)
             if syncIssue != nil { syncIssue = nil }
             flushPendingWrites()
         } catch {
             guard let issue = PalsError.from(error) else { return }
             if cloudStatus == .unknown { cloudStatus = .failed }
             syncIssue = issue
+        }
+    }
+
+    /// Sets up push subscriptions when your circles change (and once per launch). Optional: if it
+    /// fails, the regular refresh still keeps things current, so it's only logged and retried later.
+    private func syncSubscriptionsIfNeeded(_ circles: [CloudCircle]) {
+        let codes = Set(circles.map(\.code))
+        guard !codes.isEmpty, codes != subscribedCodes else { return }
+        subscribedCodes = codes
+        let list = circles.map { (code: $0.code, name: $0.name) }
+        Task {
+            do {
+                try await cloud.syncSubscriptions(circles: list)
+            } catch {
+                subscribedCodes = nil
+                PalsError.logOnly(error, context: "syncing push subscriptions")
+            }
         }
     }
 
@@ -665,6 +685,7 @@ final class HomeModel {
         defaults.set(code, forKey: Self.selectedKey)
         await refresh()
         refreshAfterChange()
+        Task { await PushNotifications.askPermissionIfNeeded() }
         return code
     }
 
@@ -689,6 +710,7 @@ final class HomeModel {
         defaults.set(code, forKey: Self.selectedKey)
         await refresh()
         refreshAfterChange()
+        Task { await PushNotifications.askPermissionIfNeeded() }
         return nil
     }
 

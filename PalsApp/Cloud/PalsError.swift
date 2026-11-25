@@ -95,6 +95,11 @@ struct PalsError: Error, Identifiable, Equatable {
         }
     }
 
+    /// Logs a failure nobody needs to see (e.g. an optional push subscription that didn't save).
+    static func logOnly(_ error: Error, context: String) {
+        log.error("\(context, privacy: .public) failed: \(String(describing: error))")
+    }
+
     static var offline: PalsError {
         PalsError(kind: .offline, title: "You're offline",
                   message: "Your changes will sync when you're back online.")
