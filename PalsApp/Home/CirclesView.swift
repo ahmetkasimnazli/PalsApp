@@ -85,6 +85,8 @@ struct CirclesView: View {
                 .padding(.horizontal, 20)
             }
             .scrollIndicators(.hidden)
+            // Pull down to sync with iCloud now.
+            .refreshable { await model.refresh() }
             .background(Color.palsOffWhite.ignoresSafeArea())
             .navigationDestination(for: PalsCircle.ID.self) { id in
                 CircleDetailView(model: model, circleID: id, onOpenOrbit: onOpenOrbit)
@@ -278,6 +280,8 @@ private struct CircleDetailView: View {
                 .padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
+            // Pull down to sync with iCloud now.
+            .refreshable { await model.refresh() }
             .background(Color.palsOffWhite.ignoresSafeArea())
             // The system bar gives a standard back button and the edge swipe to go back.
             .navigationBarTitleDisplayMode(.inline)
@@ -469,6 +473,8 @@ private struct NewCircleSheet: View {
     @State private var picked: Set<String> = ["Walk for 5 minutes"]
     @State private var members = Set<Friend.ID>()
     @State private var creating = false
+    /// Why the last try to create the circle failed.
+    @State private var createError: PalsError?
     /// Set once a real circle exists, to show its invite code.
     @State private var createdCode: String?
 
@@ -598,16 +604,37 @@ private struct NewCircleSheet: View {
                 }
                 }
 
+                if let createError {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(createError.title).font(.pals(15, weight: .bold))
+                            Text(createError.message).font(.palsBody(14))
+                        }
+                    } icon: {
+                        Image(systemName: createError.kind == .offline ? "wifi.slash" : "exclamationmark.icloud")
+                    }
+                    .foregroundStyle(Color.palsPink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(Color.palsPink.opacity(0.1), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .transition(.opacity)
+                }
+
                 Button {
                     creating = true
+                    withAnimation(Motion.disappear) { createError = nil }
                     Task {
-                        let code = await model.createCircle(name: name.trimmingCharacters(in: .whitespaces),
-                                                            emoji: emoji,
-                                                            activities: activities.filter(picked.contains),
-                                                            memberIDs: members)
-                        creating = false
-                        if let code { withAnimation(Motion.appear) { createdCode = code } }
-                        else if model.cloudError == nil { dismiss() }
+                        do {
+                            let code = try await model.createCircle(name: name.trimmingCharacters(in: .whitespaces),
+                                                                    emoji: emoji,
+                                                                    activities: activities.filter(picked.contains),
+                                                                    memberIDs: members)
+                            creating = false
+                            if let code { withAnimation(Motion.appear) { createdCode = code } } else { dismiss() }
+                        } catch {
+                            creating = false
+                            withAnimation(Motion.appear) { createError = PalsError.from(error) ?? .unknown }
+                        }
                     }
                 } label: {
                     Text(creating ? "Creating…" : "Create circle")

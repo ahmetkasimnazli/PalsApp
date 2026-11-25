@@ -54,16 +54,26 @@ final class CloudStore {
 
     // MARK: - Reading
 
-    /// Every circle you're a member of, with today's state.
-    func fetchMyCircles() async throws -> [CloudCircle] {
+    /// Every circle you're a member of, with today's state, plus `known` circles (ones this
+    /// device created or joined). Queries only see a new record a few seconds after it's saved,
+    /// so a circle you just joined may be missing from the membership query; fetching it by code
+    /// always works. `gone` lists known codes whose circle no longer exists.
+    func fetchMyCircles(known: Set<String> = []) async throws -> (circles: [CloudCircle], gone: Set<String>) {
         let me = try await userID()
         let memberships = try await query(RecordType.member, NSPredicate(format: "userID == %@", me))
-        let codes = Set(memberships.compactMap { $0["circleID"] as? String })
+        let codes = Set(memberships.compactMap { $0["circleID"] as? String }).union(known)
+
         var circles: [CloudCircle] = []
-        for code in codes.sorted() {
-            if let circle = try await fetchCircle(code: code) { circles.append(circle) }
+        var gone = Set<String>()
+        try await withThrowingTaskGroup(of: (String, CloudCircle?).self) { group in
+            for code in codes {
+                group.addTask { (code, try await self.fetchCircle(code: code)) }
+            }
+            for try await (code, circle) in group {
+                if let circle { circles.append(circle) } else { gone.insert(code) }
+            }
         }
-        return circles
+        return (circles.sorted { $0.code < $1.code }, gone)
     }
 
     /// One circle by invite code, or `nil` if there's no such circle.
@@ -167,8 +177,9 @@ final class CloudStore {
         _ = try await db.modifyRecords(saving: [], deleting: [id])
     }
 
-    func addActivity(_ activity: CircleActivity, code: String, addedBy: String) async throws {
-        try await save([activityRecord(code: code, activity: activity, addedBy: addedBy, createdAt: .now)])
+    /// `id` is chosen by the caller once, so retrying the same add never makes a duplicate.
+    func addActivity(_ activity: CircleActivity, code: String, addedBy: String, id: UUID) async throws {
+        try await save([activityRecord(code: code, activity: activity, addedBy: addedBy, createdAt: .now, id: id)])
     }
 
     func markDone(code: String, day: String) async throws {
@@ -237,9 +248,10 @@ final class CloudStore {
         return record
     }
 
-    private func activityRecord(code: String, activity: CircleActivity, addedBy: String, createdAt: Date) -> CKRecord {
+    private func activityRecord(code: String, activity: CircleActivity, addedBy: String, createdAt: Date,
+                                id: UUID = UUID()) -> CKRecord {
         let record = CKRecord(recordType: RecordType.activity,
-                              recordID: CKRecord.ID(recordName: "activity-\(code)-\(UUID().uuidString)"))
+                              recordID: CKRecord.ID(recordName: "activity-\(code)-\(id.uuidString)"))
         record["circleID"] = code
         record["emoji"] = activity.emoji
         record["title"] = activity.title
@@ -298,23 +310,6 @@ final class CloudStore {
     private static func image(_ value: Any?) -> UIImage? {
         guard let url = (value as? CKAsset)?.fileURL else { return nil }
         return UIImage(contentsOfFile: url.path(percentEncoded: false))
-    }
-
-    /// A short, human message for a CloudKit failure.
-    static func message(for error: Error) -> String {
-        guard let error = error as? CKError else { return error.localizedDescription }
-        switch error.code {
-        case .notAuthenticated: return "Sign in to iCloud in Settings to use real circles."
-        case .networkUnavailable, .networkFailure: return "You're offline. Try again when you're connected."
-        case .serviceUnavailable, .requestRateLimited, .zoneBusy: return "iCloud is busy right now. Try again in a moment."
-        case .quotaExceeded: return "Pals is out of cloud space right now. Try again later."
-        // Usually a missing queryable index in CloudKit Console (see the list at the top of this file).
-        case .invalidArguments: return "iCloud isn't set up for Pals yet (missing index). \(error.localizedDescription)"
-        case .partialFailure:
-            if let first = error.partialErrorsByItemID?.values.first { return message(for: first) }
-            return "Some changes didn't save. Try again."
-        default: return "Something went wrong with iCloud (\(error.code.rawValue))."
-        }
     }
 }
 

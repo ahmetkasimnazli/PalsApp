@@ -436,6 +436,8 @@ struct ProgressDeckView: View {
             .padding(.horizontal, 20)
         }
         .scrollIndicators(.hidden)
+        // Pull down to sync with iCloud now.
+        .refreshable { await model.refresh() }
         .background(Color.palsOffWhite.ignoresSafeArea())
     }
 

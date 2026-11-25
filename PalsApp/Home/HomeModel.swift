@@ -1,3 +1,4 @@
+import Network
 import Observation
 import SwiftUI
 
@@ -167,8 +168,11 @@ final class HomeModel {
     /// Showing the built-in demo circles rather than real ones.
     private(set) var isDemo = true
     private(set) var cloudStatus: CloudStatus = .unknown
-    /// Last iCloud problem worth telling the user about.
-    var cloudError: String?
+    /// A background sync problem, shown as a banner until a sync works again.
+    var syncIssue: PalsError?
+    /// A sync with iCloud is running.
+    private(set) var isSyncing = false
+    private(set) var isOnline = true
 
     enum CloudStatus: Equatable { case unknown, signedOut, ready, failed }
 
@@ -178,6 +182,20 @@ final class HomeModel {
     @ObservationIgnored private var circleIDs: [String: UUID] = [:]
     @ObservationIgnored private var friendIDs: [String: UUID] = [:]
     @ObservationIgnored private var touchedMembership = false
+    /// The sync in flight, so overlapping requests share it.
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    /// Extra looks a few seconds after a change, once iCloud's queries have caught up.
+    @ObservationIgnored private var followUpTask: Task<Void, Never>?
+    /// Writes that failed because we were offline; sent again once we're back.
+    @ObservationIgnored private var pendingWrites: [CloudWrite] = []
+    @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    /// Things you just did that iCloud's queries may not show for a few seconds, kept on
+    /// screen until they do: activities you added and pranks you sent, by circle code.
+    @ObservationIgnored private var recentActivities: [String: [(activity: CircleActivity, at: Date)]] = [:]
+    /// ["<code>|<day>": [pal's user ID: prank]]
+    @ObservationIgnored private var recentPranks: [String: [String: PrankKind]] = [:]
+
+    typealias CloudWrite = (CloudStore) async throws -> Void
 
     /// The activity whose session (timer / proof) is open.
     var activeActivity: CircleActivity?
@@ -204,6 +222,13 @@ final class HomeModel {
     private static let revealedKey = "revealedToday"  // ["<day>|<circle name>"]
     private static let selectedKey = "selectedCircle"
     private static let seenPranksKey = "seenPrankIDs"
+    private static let knownCodesKey = "myCircleCodes"
+
+    /// Codes of circles this device created or joined (see `CloudStore.fetchMyCircles`).
+    private var knownCodes: Set<String> {
+        get { Set(defaults.stringArray(forKey: Self.knownCodesKey) ?? []) }
+        set { defaults.set(Array(newValue).sorted(), forKey: Self.knownCodesKey) }
+    }
 
     init() {
         var close = PalsCircle(name: "Close Friends", emoji: "🫶", color: .palsIndigo, pool: [
@@ -353,7 +378,9 @@ final class HomeModel {
         circles[index].pool.append(activity)
         if let code = circles[index].code {
             let name = myName
-            push { try await $0.addActivity(activity, code: code, addedBy: name) }
+            let id = UUID()
+            recentActivities[code, default: []].append((activity, .now))
+            push { try await $0.addActivity(activity, code: code, addedBy: name, id: id) }
         }
     }
 
@@ -388,6 +415,7 @@ final class HomeModel {
             for f in circles[c].friends.indices where circles[c].friends[f].id == friendID {
                 circles[c].friends[f].prankedToday = kind
                 if let code = circles[c].code, let to = circles[c].friends[f].cloudID {
+                    recentPranks["\(code)|\(PalsDay.key(.now))", default: [:]][to] = kind
                     push { try await $0.sendPrank(kind, to: to, code: code, day: PalsDay.key(.now)) }
                 }
             }
@@ -515,16 +543,31 @@ final class HomeModel {
     var canUseCloud: Bool { cloudStatus == .ready }
 
     /// Pulls your real circles from iCloud. With none (or no iCloud), the demo circles stay.
+    /// Overlapping calls (pull to refresh, the timer, a push) share one sync.
     func refresh() async {
+        if let running = refreshTask {
+            await running.value
+            return
+        }
+        let task = Task { await performRefresh() }
+        refreshTask = task
+        await task.value
+        refreshTask = nil
+    }
+
+    private func performRefresh() async {
         guard await cloud.isAvailable() else {
             cloudStatus = .signedOut
             return
         }
+        isSyncing = true
+        defer { isSyncing = false }
         do {
             let me = try await cloud.userID()
             myUserID = me
-            let fetched = try await cloud.fetchMyCircles()
             cloudStatus = .ready
+            let (fetched, gone) = try await cloud.fetchMyCircles(known: knownCodes)
+            knownCodes = knownCodes.union(fetched.map(\.code)).subtracting(gone)
             if !touchedMembership {
                 touchedMembership = true
                 // Once per launch: your current name/photo and "active now" in every circle,
@@ -536,10 +579,56 @@ final class HomeModel {
                 push { try await $0.deleteOldMoments() }
             }
             apply(fetched, me: me)
+            if syncIssue != nil { syncIssue = nil }
+            flushPendingWrites()
         } catch {
-            cloudStatus = .failed
-            cloudError = CloudStore.message(for: error)
+            guard let issue = PalsError.from(error) else { return }
+            if cloudStatus == .unknown { cloudStatus = .failed }
+            syncIssue = issue
         }
+    }
+
+    /// iCloud's queries show a change a few seconds after it's saved: look again shortly after one.
+    private func refreshAfterChange() {
+        followUpTask?.cancel()
+        followUpTask = Task {
+            for delay in [2.0, 6.0] {
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled else { return }
+                await refresh()
+            }
+        }
+    }
+
+    /// Watches the connection: going offline shows the banner, coming back sends what waited.
+    func startMonitoringNetwork() {
+        guard pathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            let online = path.status == .satisfied
+            Task { @MainActor in self?.networkChanged(online: online) }
+        }
+        monitor.start(queue: DispatchQueue(label: "pals.network"))
+        pathMonitor = monitor
+    }
+
+    private func networkChanged(online: Bool) {
+        guard online != isOnline else { return }
+        isOnline = online
+        // Only worth a banner once there are real circles to keep in sync.
+        guard !isDemo else { return }
+        if online {
+            if syncIssue?.kind == .offline { syncIssue = nil }
+            Task { await refresh() } // also sends the writes that waited
+        } else {
+            syncIssue = .offline
+        }
+    }
+
+    /// The banner's "Try again".
+    func retrySync() {
+        syncIssue = nil
+        Task { await refresh() }
     }
 
     /// Your name or photo changed: update it in every real circle.
@@ -550,51 +639,90 @@ final class HomeModel {
         }
     }
 
-    /// Creates a real circle in iCloud, or a demo one without iCloud. Returns the invite code.
+    /// Creates a real circle in iCloud, or a demo one without iCloud. Returns the invite code
+    /// (`nil` for a demo circle); throws a `PalsError` if iCloud couldn't make it.
     @discardableResult
     func createCircle(name: String, emoji: String, activities: [String],
-                      memberIDs: Set<Friend.ID>) async -> String? {
+                      memberIDs: Set<Friend.ID>) async throws -> String? {
+        if cloudStatus != .ready && cloudStatus != .signedOut { await refresh() }
         guard canUseCloud else {
-            createDemoCircle(name: name, emoji: emoji, activities: activities, memberIDs: memberIDs)
-            return nil
+            if cloudStatus == .signedOut {
+                createDemoCircle(name: name, emoji: emoji, activities: activities, memberIDs: memberIDs)
+                return nil
+            }
+            throw syncIssue ?? .unknown
         }
+        let colorIndex = isDemo ? 0 : circles.count % 3
+        let code: String
         do {
-            let colorIndex = isDemo ? 0 : circles.count % 3
-            let code = try await cloud.createCircle(name: name, emoji: emoji, colorIndex: colorIndex,
-                                                    activities: activities.map(CircleActivity.suggestion),
-                                                    me: myProfile)
-            defaults.set(code, forKey: Self.selectedKey)
-            await refresh()
-            return code
+            code = try await cloud.createCircle(name: name, emoji: emoji, colorIndex: colorIndex,
+                                                activities: activities.map(CircleActivity.suggestion),
+                                                me: myProfile)
         } catch {
-            cloudError = CloudStore.message(for: error)
-            return nil
+            throw PalsError.from(error) ?? .unknown
         }
+        knownCodes.insert(code)
+        defaults.set(code, forKey: Self.selectedKey)
+        await refresh()
+        refreshAfterChange()
+        return code
     }
 
-    /// Joins a real circle by its invite code. Returns an error message, or `nil` on success.
+    /// Joins a real circle by its invite code. Returns what went wrong, or `nil` on success.
     func joinCircle(code: String) async -> String? {
-        guard canUseCloud else { return "Sign in to iCloud in Settings to join a circle." }
+        if cloudStatus != .ready && cloudStatus != .signedOut { await refresh() }
+        guard canUseCloud else {
+            return cloudStatus == .signedOut
+                ? "Sign in to iCloud in Settings to join a circle."
+                : (syncIssue ?? .unknown).message
+        }
         let code = CloudStore.normalized(code)
         guard code.count == 8 else { return "Invite codes have 8 letters and numbers." }
         do {
             guard try await cloud.join(code: code, me: myProfile) else {
                 return "No circle has that code. Check it with your pal."
             }
-            defaults.set(code, forKey: Self.selectedKey)
-            await refresh()
-            return nil
         } catch {
-            return CloudStore.message(for: error)
+            return (PalsError.from(error) ?? .unknown).message
+        }
+        knownCodes.insert(code)
+        defaults.set(code, forKey: Self.selectedKey)
+        await refresh()
+        refreshAfterChange()
+        return nil
+    }
+
+    /// Sends a change to iCloud in the background. Network blips and a busy iCloud are retried
+    /// with a growing pause; offline changes wait for the connection; anything else shows the
+    /// sync banner. Every write is an upsert to a fixed record name, so sending one twice is safe.
+    private func push(_ write: @escaping CloudWrite) {
+        Task { await send(write) }
+    }
+
+    private func send(_ write: @escaping CloudWrite, attempt: Int = 1) async {
+        do {
+            try await write(cloud)
+            if syncIssue?.isTransient == true { syncIssue = nil }
+            refreshAfterChange()
+        } catch {
+            guard let issue = PalsError.from(error) else { return }
+            if issue.kind == .offline {
+                pendingWrites.append(write)
+                syncIssue = issue
+            } else if issue.isTransient && attempt < 4 {
+                try? await Task.sleep(for: .seconds(issue.retryAfter ?? pow(2, Double(attempt))))
+                await send(write, attempt: attempt + 1)
+            } else {
+                syncIssue = issue
+            }
         }
     }
 
-    /// Runs a write in the background; failures surface as `cloudError`.
-    private func push(_ write: @escaping (CloudStore) async throws -> Void) {
-        let cloud = cloud
-        Task {
-            do { try await write(cloud) } catch { cloudError = CloudStore.message(for: error) }
-        }
+    private func flushPendingWrites() {
+        guard !pendingWrites.isEmpty else { return }
+        let writes = pendingWrites
+        pendingWrites = []
+        for write in writes { push(write) }
     }
 
     /// Replaces the circles with what's in iCloud, keeping local IDs and today's state.
@@ -613,6 +741,12 @@ final class HomeModel {
             let id = circleIDs[remote.code] ?? UUID()
             circleIDs[remote.code] = id
             let doneToday = remote.done[today] ?? []
+            let sentToday = recentPranks["\(remote.code)|\(today)"] ?? [:]
+            // Activities you added that the query doesn't show yet (forgotten after 5 minutes).
+            let shown = Set(remote.activities.map(\.title))
+            recentActivities[remote.code] = recentActivities[remote.code]?
+                .filter { !shown.contains($0.activity.title) && Date.now.timeIntervalSince($0.at) < 5 * 60 }
+            let unseen = recentActivities[remote.code]?.map(\.activity) ?? []
 
             let friends: [Friend] = remote.members.filter { $0.userID != me }.map { member in
                 let friendID = friendIDs[member.userID] ?? UUID()
@@ -623,7 +757,8 @@ final class HomeModel {
                     color: palette[Self.stableHash(member.userID) % palette.count],
                     isActive: member.lastActive.map { Date.now.timeIntervalSince($0) < 10 * 60 } ?? false,
                     doneToday: doneToday.contains(member.userID),
-                    prankedToday: remote.pranks.first { $0.fromID == me && $0.toID == member.userID }?.kind,
+                    prankedToday: remote.pranks.first { $0.fromID == me && $0.toID == member.userID }?.kind
+                        ?? sentToday[member.userID],
                     cloudID: member.userID,
                     photo: member.avatar
                 )
@@ -633,7 +768,7 @@ final class HomeModel {
                 name: remote.name, emoji: remote.emoji, color: palette[remote.colorIndex % palette.count],
                 pool: remote.activities.map {
                     CircleActivity(emoji: $0.emoji, title: $0.title, minutes: $0.minutes, addedBy: $0.addedBy)
-                },
+                } + unseen,
                 streak: Self.streak(remote.done, members: Set(remote.members.map(\.userID))),
                 friends: friends,
                 code: remote.code

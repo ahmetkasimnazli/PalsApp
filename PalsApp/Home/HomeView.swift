@@ -135,6 +135,8 @@ struct HomeView: View {
             .padding(.horizontal, 20)
         }
         .scrollIndicators(.hidden)
+        // Pull down to sync with iCloud now.
+        .refreshable { await model.refresh() }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .background(Color.palsIndigo.ignoresSafeArea())
         .onChange(of: startVisible, initial: true) { _, visible in

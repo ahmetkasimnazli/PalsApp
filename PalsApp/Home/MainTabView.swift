@@ -1,3 +1,4 @@
+import CloudKit
 import SwiftUI
 
 /// App shell after onboarding: Orbit (home), Circles, Progress, Profile.
@@ -106,23 +107,32 @@ struct MainTabView: View {
             playPendingPrank()
         }
         .task(id: scenePhase) {
-            // Keep real circles fresh while the app is open: pals' moments, pranks, who's done.
+            // Keep real circles fresh while the app is open: who joined, who's done, moments, pranks.
             guard scenePhase == .active else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                try? await Task.sleep(for: .seconds(15))
                 guard !Task.isCancelled else { return }
                 await model.refresh()
             }
         }
+        .task { model.startMonitoringNetwork() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refresh() } }
         }
-        .alert("iCloud", isPresented: Binding(get: { model.cloudError != nil },
-                                              set: { if !$0 { model.cloudError = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.cloudError ?? "")
+        // Signed in or out of iCloud (or switched accounts) while Pals was open.
+        .onReceive(NotificationCenter.default.publisher(for: .CKAccountChanged)) { _ in
+            Task { await model.refresh() }
         }
+        .overlay(alignment: .top) {
+            if let issue = model.syncIssue {
+                SyncBanner(issue: issue, onRetry: model.retrySync) {
+                    withAnimation(Motion.disappear) { model.syncIssue = nil }
+                }
+                .padding(.horizontal, 16)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(Motion.sheet, value: model.syncIssue?.id)
         .onChange(of: model.incomingPrank) { _, _ in
             playPendingPrank()
         }
