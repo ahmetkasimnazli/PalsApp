@@ -33,6 +33,7 @@ struct ProfileSetupView: View {
                         .font(.palsBody(15))
                         .foregroundStyle(.white.opacity(0.7))
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                         .opacity(nameFocused ? 0 : 1)
                 }
                 .frame(maxWidth: .infinity)

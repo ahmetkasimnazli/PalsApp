@@ -34,10 +34,15 @@ struct ProfilePhotoPicker: View {
             .accessibilityLabel(photo == nil ? "Add profile photo or Memoji" : "Change profile photo")
 
             if showsOptions {
-                HStack(spacing: 10) {
-                    option("Photo", systemImage: "photo.on.rectangle") { pickingPhoto = true }
-                    option("Memoji", systemImage: "face.smiling") { pickingMemoji = true }
+                // Two drops of glass melted into one: the container's spacing is wider than the
+                // gap between them, so their shapes blend together at rest.
+                GlassEffectContainer(spacing: 28) {
+                    HStack(spacing: 2) {
+                        option("Photo", systemImage: "photo.on.rectangle") { pickingPhoto = true }
+                        option("Memoji", systemImage: "face.smiling") { pickingMemoji = true }
+                    }
                 }
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
         .photosPicker(isPresented: $pickingPhoto, selection: $selection, matching: .images, photoLibrary: .shared())
@@ -101,15 +106,18 @@ struct ProfilePhotoPicker: View {
 
     private func option(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.pals(16, weight: .bold))
-                .foregroundStyle(onDark ? Color.white : Color.palsInk)
-                .padding(.horizontal, 18)
-                .frame(minHeight: 44)
-                .contentShape(Capsule())
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .semibold))
+                Text(title)
+                    .font(.pals(13, weight: .bold))
+            }
+            .foregroundStyle(onDark ? Color.white : Color.palsInk)
+            .frame(width: 76, height: 76)
+            .contentShape(Circle())
         }
         .buttonStyle(PressableStyle())
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassEffect(.regular.interactive(), in: .circle)
     }
 
     private func load(_ item: PhotosPickerItem) async {
