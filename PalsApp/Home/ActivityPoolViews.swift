@@ -38,11 +38,15 @@ struct AddActivitySheet: View {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .top) {
                     HighlightHeadline(lines: [isEditing ? "Edit" : "New"], highlight: "activity", size: 44)
+                        .info(isEditing
+                              ? "The change shows up for everyone in the circle."
+                              : "It joins the circle's pool. Each day one activity from the pool is picked for everyone.",
+                              size: 20)
                     Spacer()
                     CloseButton { dismiss() }
                 }
 
-                section("Ideas") {
+                section("Ideas", info: "Tap a bubble for ideas, or write your own below.") {
                     VStack(alignment: .leading, spacing: 12) {
                         CategoryBlob(selected: $category)
                         if let category {
@@ -65,10 +69,6 @@ struct AddActivitySheet: View {
                                 }
                             }
                             .transition(.move(edge: .top).combined(with: .opacity))
-                        } else {
-                            Text("Tap a bubble for ideas, or write your own below.")
-                                .font(.palsBody(13))
-                                .foregroundStyle(Color.palsInk.opacity(0.5))
                         }
                     }
                 }
@@ -88,12 +88,6 @@ struct AddActivitySheet: View {
                 section("Timer") {
                     TimerDial(minutes: $minutes)
                 }
-
-                Text(isEditing
-                     ? "The change shows up for everyone in the circle."
-                     : "It joins the circle's pool. Each day one activity from the pool is picked for everyone.")
-                    .font(.palsBody(14))
-                    .foregroundStyle(Color.palsInk.opacity(0.5))
 
                 Button {
                     onAdd(CircleActivity(emoji: emoji, title: trimmed, minutes: minutes))
@@ -116,12 +110,19 @@ struct AddActivitySheet: View {
         .presentationBackground(Color.palsOffWhite)
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: String, info: String? = nil,
+                                        @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
+            let heading = Text(title.uppercased())
                 .font(.pals(13))
                 .tracking(1)
                 .foregroundStyle(Color.palsInk.opacity(0.5))
+            if let info {
+                heading.info(info, size: 14)
+                    .padding(.vertical, -12)
+            } else {
+                heading
+            }
             content()
         }
     }

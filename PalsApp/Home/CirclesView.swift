@@ -14,12 +14,8 @@ struct CirclesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HighlightHeadline(lines: ["Your"], highlight: "circles", size: 52)
+                        .info("Every day each circle gets one activity from its pool. Skip it, and your pals get to prank you.", size: 20)
                         .padding(.top, 12)
-
-                    Text("Every day each circle gets one activity from its pool. Skip it, and your pals get to prank you.")
-                        .font(.palsBody(16))
-                        .foregroundStyle(Color.palsInk.opacity(0.65))
-                        .padding(.top, 10)
 
                     if model.isDemo {
                         Label(model.cloudStatus == .signedOut
@@ -379,10 +375,8 @@ private struct CircleDetailView: View {
         let todayID = model.isRevealed(circle) ? circle.today.id : nil
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("THE POOL")
-                .padding(.top, 26)
-            Text("Every day one card is drawn from this deck for everyone. Tap to fan it out; anyone can add a card, and you can edit or delete the ones you added.")
-                .font(.palsBody(14))
-                .foregroundStyle(Color.palsInk.opacity(0.5))
+                .info("Every day one card is drawn from this deck for everyone. Tap to fan it out; anyone can add a card, and you can edit or delete the ones you added.", size: 15)
+                .padding(.top, 14)
 
             PoolDeck(pool: circle.pool, todayID: todayID,
                      onEdit: { editingActivity = $0 },
@@ -525,9 +519,7 @@ private struct NewCircleSheet: View {
     private func createdView(code: String) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             HighlightHeadline(lines: ["Circle"], highlight: "created", size: 44)
-            Text("Share the code with your pals. They open Pals, tap Join with a code and type it in.")
-                .font(.palsBody(16))
-                .foregroundStyle(Color.palsInk.opacity(0.65))
+                .info("Share the code with your pals. They open Pals, tap Join with a code and type it in.", size: 20)
             InviteCard(circleName: name, code: code)
             Spacer()
             Button { dismiss() } label: {
@@ -588,13 +580,9 @@ private struct NewCircleSheet: View {
                     }
                 }
 
-                section("What will you do together?") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        PassionPicker(picked: $picked)
-                        Text("Pick a few. Each day one of them is chosen for everyone, and anyone can add more later.")
-                            .font(.palsBody(13))
-                            .foregroundStyle(Color.palsInk.opacity(0.5))
-                    }
+                section("What will you do together?",
+                        info: "Pick a few. Each day one of them is chosen for everyone, and anyone can add more later.") {
+                    PassionPicker(picked: $picked)
                 }
 
                 if model.canUseCloud {
@@ -679,12 +667,19 @@ private struct NewCircleSheet: View {
         .presentationBackground(Color.palsOffWhite)
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: String, info: String? = nil,
+                                        @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
+            let heading = Text(title.uppercased())
                 .font(.pals(13))
                 .tracking(1)
                 .foregroundStyle(Color.palsInk.opacity(0.5))
+            if let info {
+                heading.info(info, size: 14)
+                    .padding(.vertical, -12)
+            } else {
+                heading
+            }
             content()
         }
     }
@@ -802,9 +797,7 @@ private struct JoinCircleSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HighlightHeadline(lines: ["Join a"], highlight: "circle", size: 44)
-            Text("Type the 8-character code a pal shared with you.")
-                .font(.palsBody(16))
-                .foregroundStyle(Color.palsInk.opacity(0.65))
+                .info("Type the 8-character code a pal shared with you.", size: 20)
 
             TextField("ABCD 2345", text: $code)
                 .font(.palsDisplay(30))

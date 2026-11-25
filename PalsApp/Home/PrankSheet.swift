@@ -40,10 +40,7 @@ struct PrankSheet: View {
                         .foregroundStyle(Color.palsInk.opacity(0.7))
                 } else {
                     HighlightHeadline(lines: ["\(friend.name) skipped"], highlight: "Prank them", size: 42)
-
-                    Text("Pick a card. It plays on their screen the next time they open Pals.")
-                        .font(.palsBody(16))
-                        .foregroundStyle(Color.palsInk.opacity(0.7))
+                        .info("Pick a card. It plays on their screen the next time they open Pals.", size: 20)
 
                     // Edge to edge, so the side cards peek in from the sheet's edges.
                     PrankPicker(selected: $selected)

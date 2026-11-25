@@ -449,6 +449,7 @@ struct ProgressDeckView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HighlightHeadline(lines: ["Your"], highlight: "deck", size: 52)
+                    .info("Every day you show up, that day's card goes in your deck. Showing \(model.selectedCircle.name).", size: 20)
                     .padding(.top, 12)
 
                 HStack(spacing: 10) {
@@ -456,11 +457,6 @@ struct ProgressDeckView: View {
                     statPill("🃏 \(days.filter(\.done).count) cards")
                 }
                 .padding(.top, 12)
-
-                Text("Every day you show up, that day's card goes in your deck. Showing \(model.selectedCircle.name).")
-                    .font(.palsBody(15))
-                    .foregroundStyle(Color.palsInk.opacity(0.6))
-                    .padding(.top, 10)
 
                 deck
                     .padding(.top, 24)
