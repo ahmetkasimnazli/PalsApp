@@ -448,8 +448,8 @@ struct ProgressDeckView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HighlightHeadline(lines: ["Your"], highlight: "deck", size: 52)
-                    .info("Every day you show up, that day's card goes in your deck. Showing \(model.selectedCircle.name).", size: 20)
+                HighlightHeadline(lines: ["Your"], highlight: "deck", size: 52,
+                    info: "Every day you show up, that day's card goes in your deck. Showing \(model.selectedCircle.name).")
                     .padding(.top, 12)
 
                 HStack(spacing: 10) {

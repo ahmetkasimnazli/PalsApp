@@ -43,21 +43,22 @@ struct InfoButton: View {
 }
 
 extension View {
-    /// Puts an `InfoButton` right after this heading, centred on its last line.
+    /// Puts an `InfoButton` right after a one-line heading, centred on it. For `HighlightHeadline`
+    /// use its `info:` parameter, which puts the button after the last line.
     func info(_ text: String, size: CGFloat = 17, onDark: Bool = false) -> some View {
-        HStack(alignment: .lastTextBaseline, spacing: 0) {
+        HStack(alignment: .center, spacing: 0) {
             self
             InfoButton(text, size: size, onDark: onDark)
-                .alignmentGuide(.lastTextBaseline) { $0[VerticalAlignment.center] + size * 0.35 }
-                .padding(.leading, -6)
+                .padding(.leading, -8)
+                .padding(.vertical, -12)
         }
     }
 }
 
 #Preview {
     VStack(alignment: .leading, spacing: 20) {
-        HighlightHeadline(lines: ["Your"], highlight: "circles", size: 52)
-            .info("Every day each circle gets one activity from its pool.")
+        HighlightHeadline(lines: ["Your"], highlight: "circles", size: 52,
+                          info: "Every day each circle gets one activity from its pool.")
         Text("THE POOL").font(.pals(14)).tracking(1).foregroundStyle(.secondary)
             .info("Every day one card is drawn from this deck for everyone.", size: 14)
     }

@@ -37,11 +37,10 @@ struct AddActivitySheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .top) {
-                    HighlightHeadline(lines: [isEditing ? "Edit" : "New"], highlight: "activity", size: 44)
-                        .info(isEditing
+                    HighlightHeadline(lines: [isEditing ? "Edit" : "New"], highlight: "activity", size: 44,
+                        info: isEditing
                               ? "The change shows up for everyone in the circle."
-                              : "It joins the circle's pool. Each day one activity from the pool is picked for everyone.",
-                              size: 20)
+                              : "It joins the circle's pool. Each day one activity from the pool is picked for everyone.")
                     Spacer()
                     CloseButton { dismiss() }
                 }
@@ -119,7 +118,6 @@ struct AddActivitySheet: View {
                 .foregroundStyle(Color.palsInk.opacity(0.5))
             if let info {
                 heading.info(info, size: 14)
-                    .padding(.vertical, -12)
             } else {
                 heading
             }

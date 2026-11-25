@@ -16,8 +16,8 @@ struct CirclesView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    HighlightHeadline(lines: ["Your"], highlight: "circles", size: 52)
-                        .info("Every day each circle gets one activity from its pool. Skip it, and your pals get to prank you.", size: 20)
+                    HighlightHeadline(lines: ["Your"], highlight: "circles", size: 52,
+                        info: "Every day each circle gets one activity from its pool. Skip it, and your pals get to prank you.")
                         .padding(.top, 12)
 
                     actions
@@ -413,7 +413,7 @@ private struct CircleDetailView: View {
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("THE POOL")
                 .info("Every day one card is drawn from this deck for everyone. Tap to fan it out; anyone can add a card, and you can edit or delete the ones you added.", size: 15)
-                .padding(.top, 14)
+                .padding(.top, 26)
 
             PoolDeck(pool: circle.pool, todayID: todayID,
                      onEdit: { editingActivity = $0 },
@@ -555,8 +555,8 @@ private struct NewCircleSheet: View {
     /// After a real circle is made: its invite code, ready to share.
     private func createdView(code: String) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            HighlightHeadline(lines: ["Circle"], highlight: "created", size: 44)
-                .info("Share the code with your pals. They open Pals, tap Join with a code and type it in.", size: 20)
+            HighlightHeadline(lines: ["Circle"], highlight: "created", size: 44,
+                info: "Share the code with your pals. They open Pals, tap Join with a code and type it in.")
             InviteCard(circleName: name, code: code)
             Spacer()
             Button { dismiss() } label: {
@@ -713,7 +713,6 @@ private struct NewCircleSheet: View {
                 .foregroundStyle(Color.palsInk.opacity(0.5))
             if let info {
                 heading.info(info, size: 14)
-                    .padding(.vertical, -12)
             } else {
                 heading
             }
@@ -833,8 +832,8 @@ private struct JoinCircleSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HighlightHeadline(lines: ["Join a"], highlight: "circle", size: 44)
-                .info("Type the 8-character code a pal shared with you.", size: 20)
+            HighlightHeadline(lines: ["Join a"], highlight: "circle", size: 44,
+                info: "Type the 8-character code a pal shared with you.")
 
             TextField("ABCD 2345", text: $code)
                 .font(.palsDisplay(30))

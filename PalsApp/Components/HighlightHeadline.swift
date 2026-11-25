@@ -7,22 +7,39 @@ struct HighlightHeadline: View {
     let highlight: String
     var size: CGFloat = 64
     var color: Color = .palsInk
+    /// Explains the section behind a small info button, right after the last line.
+    var info: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: -size * 0.2) {
             // Headlines never end in a period ("?" and "!" stay).
             ForEach(lines, id: \.self) { line in
                 Text(Self.trimmed(line))
+                    .accessibilityAddTraits(.isHeader)
             }
-            Text(Self.trimmed(highlight))
+            HStack(alignment: .center, spacing: 0) {
+                Text(Self.trimmed(highlight))
+                    .accessibilityAddTraits(.isHeader)
+                if let info {
+                    InfoButton(info, size: Self.infoSize(for: size), onDark: color != .palsInk)
+                        // Optically on the letters (the line box includes the descender room).
+                        .offset(y: -size * 0.04)
+                        .padding(.leading, -4)
+                        .padding(.vertical, -10)
+                }
+            }
         }
         .font(.palsDisplay(size))
         .tracking(-size * 0.03)
         .foregroundStyle(color)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Small next to the headline, but never tiny.
+    private static func infoSize(for size: CGFloat) -> CGFloat {
+        min(22, max(16, size * 0.38))
     }
 
     private static func trimmed(_ text: String) -> String {
